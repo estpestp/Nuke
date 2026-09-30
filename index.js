@@ -23,7 +23,7 @@ const SESSION_SECRET =
   process.env.SESSION_SECRET || 'change-this-secret';
 
 if (!TOKEN) {
-  console.error('DISCORD_TOKEN 환경변수가 없습니다.');
+  console.error('❌ DISCORD_TOKEN 환경변수가 없습니다.');
   process.exit(1);
 }
 
@@ -78,25 +78,31 @@ function broadcastBotStatus() {
 }
 
 // ========================================
-// Discord 준비 완료
+// Discord 로그인 완료
 // ========================================
 
 client.once('ready', () => {
-  console.log(`Discord 로그인 완료: ${client.user.tag}`);
+  console.log(`✅ Discord 로그인 완료: ${client.user.tag}`);
+
+  console.log(
+    `📡 현재 ${client.guilds.cache.size}개의 서버에 연결되어 있습니다.`
+  );
 
   broadcastBotStatus();
 });
 
-// Discord 연결 복구
+// ========================================
+// Discord 연결 상태
+// ========================================
+
 client.on('shardReady', () => {
-  console.log('Discord 연결이 준비되었습니다.');
+  console.log('🟢 Discord 연결 준비 완료');
 
   broadcastBotStatus();
 });
 
-// Discord 연결 종료
 client.on('shardDisconnect', () => {
-  console.log('Discord 연결이 종료되었습니다.');
+  console.log('🔴 Discord 연결 종료');
 
   io.emit('botStatus', {
     online: false,
@@ -105,9 +111,8 @@ client.on('shardDisconnect', () => {
   });
 });
 
-// Discord 연결 재개
 client.on('shardResume', () => {
-  console.log('Discord 연결이 재개되었습니다.');
+  console.log('🟢 Discord 연결 재개');
 
   broadcastBotStatus();
 });
@@ -117,12 +122,10 @@ client.on('shardResume', () => {
 // ========================================
 
 client.on('messageCreate', message => {
-
   if (!message.guild) return;
 
   console.log(
-    `[${message.guild.name}] ` +
-    `${message.author.username}: ${message.content}`
+    `[${message.guild.name}] ${message.author.username}: ${message.content}`
   );
 
   io.emit('discordMessage', {
@@ -143,7 +146,6 @@ client.on('messageCreate', message => {
 // ========================================
 
 function requireLogin(req, res, next) {
-
   if (!req.session.loggedIn) {
     return res.redirect('/login');
   }
@@ -156,7 +158,6 @@ function requireLogin(req, res, next) {
 // ========================================
 
 app.get('/login', (req, res) => {
-
   res.send(`
 <!DOCTYPE html>
 <html lang="ko">
@@ -181,8 +182,10 @@ content="width=device-width,initial-scale=1"
 body {
   margin: 0;
   min-height: 100vh;
+
   background: #0f1117;
   color: white;
+
   font-family: Arial, sans-serif;
 
   display: flex;
@@ -192,10 +195,15 @@ body {
 
 .login {
   width: 350px;
+
   background: #181b23;
+
   padding: 30px;
+
   border-radius: 18px;
-  box-shadow: 0 15px 50px rgba(0,0,0,.4);
+
+  box-shadow:
+    0 15px 50px rgba(0,0,0,.4);
 }
 
 h1 {
@@ -204,27 +212,35 @@ h1 {
 
 input {
   width: 100%;
+
   padding: 14px;
+
   margin: 15px 0;
 
   background: #0f1117;
+
   color: white;
 
   border: 1px solid #343846;
+
   border-radius: 9px;
 }
 
 button {
   width: 100%;
+
   padding: 14px;
 
   background: #5865f2;
+
   color: white;
 
   border: 0;
+
   border-radius: 9px;
 
   cursor: pointer;
+
   font-weight: bold;
 }
 
@@ -268,16 +284,11 @@ required
 // ========================================
 
 app.post('/login', (req, res) => {
-
   if (req.body.password !== ADMIN_PASSWORD) {
-
     return res.send(`
 <script>
-
 alert('비밀번호가 올바르지 않습니다.');
-
 location.href='/login';
-
 </script>
     `);
   }
@@ -292,11 +303,9 @@ location.href='/login';
 // ========================================
 
 app.get('/logout', (req, res) => {
-
   req.session.destroy(() => {
     res.redirect('/login');
   });
-
 });
 
 // ========================================
@@ -312,9 +321,7 @@ app.get('/', requireLogin, (req, res) => {
 
     const roles =
       guild.roles.cache
-
         .filter(role => role.id !== guild.id)
-
         .map(role => `
 <option
 value="${role.id}"
@@ -323,14 +330,11 @@ ${settings.roleId === role.id ? 'selected' : ''}
 ${escapeHtml(role.name)}
 </option>
         `)
-
         .join('');
 
     const channels =
       guild.channels.cache
-
         .filter(channel => channel.isTextBased())
-
         .map(channel => `
 <option
 value="${channel.id}"
@@ -339,14 +343,15 @@ ${settings.channelId === channel.id ? 'selected' : ''}
 # ${escapeHtml(channel.name)}
 </option>
         `)
-
         .join('');
 
     return `
 
 <div class="server">
 
-<h2>🏠 ${escapeHtml(guild.name)}</h2>
+<h2>
+🏠 ${escapeHtml(guild.name)}
+</h2>
 
 <form method="POST" action="/save">
 
@@ -356,7 +361,9 @@ name="guildId"
 value="${guild.id}"
 >
 
-<label>인증 역할</label>
+<label>
+인증 역할
+</label>
 
 <select name="roleId">
 
@@ -368,7 +375,9 @@ ${roles}
 
 </select>
 
-<label>인증 채널</label>
+<label>
+인증 채널
+</label>
 
 <select name="channelId">
 
@@ -408,7 +417,9 @@ type="submit"
 
 <hr>
 
-<h3>💬 채팅</h3>
+<h3>
+💬 채팅
+</h3>
 
 <label>
 채팅 채널
@@ -460,8 +471,7 @@ onclick="sendMessage('${guild.id}')"
 
   }).join('');
 
-  const status =
-    getBotStatus();
+  const status = getBotStatus();
 
   res.send(`
 
@@ -490,13 +500,14 @@ content="width=device-width,initial-scale=1"
 
 body {
   margin: 0;
+
   background: #0f1117;
   color: white;
+
   font-family: Arial, sans-serif;
 }
 
 header {
-
   background: #181b23;
 
   padding: 18px 25px;
@@ -506,26 +517,23 @@ header {
   justify-content: space-between;
 
   align-items: center;
-
 }
 
 header a {
   color: #aaa;
+
   text-decoration: none;
 }
 
 .container {
-
   max-width: 1000px;
 
   margin: auto;
 
   padding: 25px;
-
 }
 
 .status {
-
   background: #181b23;
 
   padding: 20px;
@@ -533,11 +541,9 @@ header a {
   border-radius: 14px;
 
   margin-bottom: 20px;
-
 }
 
 .server {
-
   background: #181b23;
 
   padding: 22px;
@@ -545,22 +551,18 @@ header a {
   border-radius: 14px;
 
   margin-bottom: 25px;
-
 }
 
 label {
-
   display: block;
 
   margin-top: 14px;
 
   margin-bottom: 6px;
-
 }
 
 select,
 .send input {
-
   width: 100%;
 
   padding: 12px;
@@ -572,11 +574,9 @@ select,
   border: 1px solid #343846;
 
   border-radius: 8px;
-
 }
 
 button {
-
   padding: 12px;
 
   margin-top: 12px;
@@ -592,19 +592,15 @@ button {
   font-weight: bold;
 
   cursor: pointer;
-
 }
 
 .green {
-
   background: #23a55a;
 
   width: 100%;
-
 }
 
 .chat {
-
   height: 350px;
 
   overflow-y: auto;
@@ -616,7 +612,6 @@ button {
   padding: 12px;
 
   margin-top: 10px;
-
 }
 
 .message {
@@ -624,49 +619,39 @@ button {
 }
 
 .author {
-
   font-weight: bold;
 
   color: #8ea1ff;
-
 }
 
 .time {
-
   font-size: 11px;
 
   color: #777;
 
   margin-left: 5px;
-
 }
 
 .content {
-
   margin-top: 3px;
 
   word-break: break-word;
-
 }
 
 .empty {
-
   color: #777;
 
   text-align: center;
 
   margin-top: 130px;
-
 }
 
 .send {
-
   display: flex;
 
   gap: 8px;
 
   margin-top: 8px;
-
 }
 
 .send input {
@@ -674,21 +659,17 @@ button {
 }
 
 .send button {
-
   width: 80px;
 
   margin-top: 0;
-
 }
 
 hr {
-
   border: 0;
 
   border-top: 1px solid #30333d;
 
   margin: 25px 0;
-
 }
 
 </style>
@@ -713,7 +694,9 @@ hr {
 
 <div class="status">
 
-<h2>봇 상태</h2>
+<h2>
+봇 상태
+</h2>
 
 <p id="botStatus">
 
@@ -756,7 +739,6 @@ ${guilds || '<p>봇이 들어가 있는 서버가 없습니다.</p>'}
 const socket = io();
 
 const selectedChannels = {};
-
 
 // ========================================
 // 실시간 봇 상태
@@ -808,7 +790,6 @@ socket.on('botStatus', data => {
 
 });
 
-
 // ========================================
 // 채널 선택
 // ========================================
@@ -835,7 +816,6 @@ function selectChannel(guildId) {
 
 }
 
-
 // ========================================
 // Discord 메시지 수신
 // ========================================
@@ -861,7 +841,6 @@ socket.on(
 
   }
 );
-
 
 // ========================================
 // 메시지 화면 추가
@@ -926,35 +905,21 @@ function addMessage(data) {
   content.textContent =
     data.content;
 
-  message.appendChild(
-    author
-  );
+  message.appendChild(author);
+  message.appendChild(time);
+  message.appendChild(content);
 
-  message.appendChild(
-    time
-  );
-
-  message.appendChild(
-    content
-  );
-
-  chat.appendChild(
-    message
-  );
+  chat.appendChild(message);
 
   chat.scrollTop =
     chat.scrollHeight;
-
 }
-
 
 // ========================================
 // 웹 → Discord 메시지
 // ========================================
 
-async function sendMessage(
-  guildId
-) {
+async function sendMessage(guildId) {
 
   const channelId =
     selectedChannels[guildId];
@@ -976,9 +941,7 @@ async function sendMessage(
     return;
   }
 
-  if (!content) {
-    return;
-  }
+  if (!content) return;
 
   const response =
     await fetch(
@@ -1013,9 +976,7 @@ async function sendMessage(
   }
 
   input.value = '';
-
 }
-
 
 // ========================================
 // Enter 전송
@@ -1441,31 +1402,16 @@ client.on(
 function escapeHtml(text) {
 
   return String(text)
-    .replace(
-      /&/g,
-      '&amp;'
-    )
-    .replace(
-      /</g,
-      '&lt;'
-    )
-    .replace(
-      />/g,
-      '&gt;'
-    )
-    .replace(
-      /"/g,
-      '&quot;'
-    )
-    .replace(
-      /'/g,
-      '&#039;'
-    );
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 }
 
 // ========================================
-// 웹 서버
+// 웹 서버 실행
 // ========================================
 
 server.listen(
@@ -1473,8 +1419,27 @@ server.listen(
   () => {
 
     console.log(
-      `웹 관리자 페이지 실행: ${PORT}`
+      `🌐 웹 관리자 페이지 실행: ${PORT}`
     );
 
   }
 );
+
+// ========================================
+// Discord 봇 로그인
+// ========================================
+
+console.log('🔄 Discord 로그인 시도 중...');
+
+client.login(TOKEN)
+  .then(() => {
+    console.log('🔑 Discord 로그인 요청 완료');
+  })
+  .catch(error => {
+
+    console.error(
+      '❌ Discord 로그인 실패:',
+      error
+    );
+
+  });
