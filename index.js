@@ -1,5 +1,7 @@
 const express = require('express');
 const session = require('express-session');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const {
   Client,
@@ -11,10 +13,14 @@ const {
 } = require('discord.js');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.DISCORD_TOKEN;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'nuke_0930';
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || 'change-this-secret';
 
 if (!TOKEN) {
   console.error('DISCORD_TOKEN 환경변수가 없습니다.');
@@ -22,42 +28,41 @@ if (!TOKEN) {
 }
 
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'change-this-secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: false,
-    maxAge: 1000 * 60 * 60 * 6
-  }
-}));
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: false,
+      maxAge: 1000 * 60 * 60 * 6
+    }
+  })
+);
 
 // ========================================
-// 서버별 설정
+// 서버 설정
 // ========================================
 
 const guildSettings = new Map();
 
 // ========================================
-// Discord 봇
+// Discord
 // ========================================
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
   ]
 });
 
-client.once('ready', () => {
-  console.log(`Discord 로그인 완료: ${client.user.tag}`);
-});
-
-client.login(TOKEN);
-
 // ========================================
-// 로그인 확인
+// 로그인
 // ========================================
 
 function requireLogin(req, res, next) {
@@ -69,6 +74,40 @@ function requireLogin(req, res, next) {
 }
 
 // ========================================
+// Discord 준비
+// ========================================
+
+client.once('ready', () => {
+  console.log(`Discord 로그인 완료: ${client.user.tag}`);
+});
+
+// ========================================
+// Discord 메시지 수신
+// ========================================
+
+client.on('messageCreate', message => {
+  if (!message.guild) return;
+
+  console.log(
+    `[${message.guild.name}] ` +
+    `${message.author.username}: ${message.content}`
+  );
+
+  // 웹 관리자에게 실시간 전달
+  io.emit('discordMessage', {
+    guildId: message.guild.id,
+    guildName: message.guild.name,
+    channelId: message.channel.id,
+    channelName: message.channel.name,
+    author: message.author.username,
+    authorAvatar: message.author.displayAvatarURL(),
+    content: message.content,
+    bot: message.author.bot,
+    timestamp: Date.now()
+  });
+});
+
+// ========================================
 // 로그인 페이지
 // ========================================
 
@@ -78,27 +117,32 @@ app.get('/login', (req, res) => {
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>인증봇 관리자</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>인증봇 로그인</title>
 
 <style>
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  background: #111318;
+  min-height: 100vh;
+  background: #0f1117;
   color: white;
   font-family: Arial, sans-serif;
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  justify-content: center;
 }
 
-.box {
-  width: 340px;
-  background: #1b1e25;
+.login {
+  width: 350px;
+  background: #181b23;
   padding: 30px;
-  border-radius: 16px;
-  box-sizing: border-box;
+  border-radius: 18px;
+  box-shadow: 0 15px 50px rgba(0,0,0,.4);
 }
 
 h1 {
@@ -107,45 +151,50 @@ h1 {
 
 input {
   width: 100%;
-  padding: 13px;
-  margin: 10px 0;
-  box-sizing: border-box;
-  border-radius: 8px;
-  border: 1px solid #444;
-  background: #101218;
+  padding: 14px;
+  margin: 15px 0;
+  background: #0f1117;
   color: white;
+  border: 1px solid #343846;
+  border-radius: 9px;
 }
 
 button {
   width: 100%;
-  padding: 13px;
-  border: 0;
-  border-radius: 8px;
+  padding: 14px;
   background: #5865f2;
   color: white;
-  font-weight: bold;
+  border: 0;
+  border-radius: 9px;
   cursor: pointer;
+  font-weight: bold;
 }
 </style>
 </head>
 
 <body>
 
-<div class="box">
-  <h1>🤖 인증봇 관리자</h1>
+<div class="login">
 
-  <form method="POST" action="/login">
-    <input
-      type="password"
-      name="password"
-      placeholder="관리자 비밀번호"
-      required
-    >
+<h1>🤖 인증봇</h1>
 
-    <button type="submit">
-      로그인
-    </button>
-  </form>
+<p>관리자 패널에 로그인하세요.</p>
+
+<form method="POST" action="/login">
+
+<input
+type="password"
+name="password"
+placeholder="비밀번호"
+required
+>
+
+<button type="submit">
+로그인
+</button>
+
+</form>
+
 </div>
 
 </body>
@@ -158,13 +207,12 @@ button {
 // ========================================
 
 app.post('/login', (req, res) => {
-
   if (req.body.password !== ADMIN_PASSWORD) {
     return res.send(`
-      <script>
-        alert('비밀번호가 올바르지 않습니다.');
-        location.href='/login';
-      </script>
+<script>
+alert('비밀번호가 올바르지 않습니다.');
+location.href='/login';
+</script>
     `);
   }
 
@@ -191,150 +239,211 @@ app.get('/', requireLogin, (req, res) => {
 
   const guilds = client.guilds.cache.map(guild => {
 
-    const settings = guildSettings.get(guild.id) || {};
+    const settings =
+      guildSettings.get(guild.id) || {};
 
     const roles = guild.roles.cache
       .filter(role => role.id !== guild.id)
       .map(role => `
-        <option value="${role.id}"
-          ${settings.roleId === role.id ? 'selected' : ''}>
-          ${escapeHtml(role.name)}
-        </option>
+<option
+value="${role.id}"
+${settings.roleId === role.id ? 'selected' : ''}
+>
+${escapeHtml(role.name)}
+</option>
       `)
       .join('');
 
     const channels = guild.channels.cache
       .filter(channel => channel.isTextBased())
       .map(channel => `
-        <option value="${channel.id}"
-          ${settings.channelId === channel.id ? 'selected' : ''}>
-          # ${escapeHtml(channel.name)}
-        </option>
+<option
+value="${channel.id}"
+${settings.channelId === channel.id ? 'selected' : ''}
+>
+# ${escapeHtml(channel.name)}
+</option>
       `)
       .join('');
 
     return `
-      <div class="server">
+<div class="server">
 
-        <h2>🏠 ${escapeHtml(guild.name)}</h2>
+<h2>🏠 ${escapeHtml(guild.name)}</h2>
 
-        <form method="POST" action="/save">
+<form method="POST" action="/save">
 
-          <input
-            type="hidden"
-            name="guildId"
-            value="${guild.id}"
-          >
+<input
+type="hidden"
+name="guildId"
+value="${guild.id}"
+>
 
-          <label>인증 역할</label>
+<label>인증 역할</label>
 
-          <select name="roleId">
-            <option value="">역할 선택</option>
-            ${roles}
-          </select>
+<select name="roleId">
+<option value="">역할 선택</option>
+${roles}
+</select>
 
-          <label>인증 채널</label>
+<label>인증 채널</label>
 
-          <select name="channelId">
-            <option value="">채널 선택</option>
-            ${channels}
-          </select>
+<select name="channelId">
+<option value="">채널 선택</option>
+${channels}
+</select>
 
-          <button type="submit">
-            설정 저장
-          </button>
+<button type="submit">
+설정 저장
+</button>
 
-        </form>
+</form>
 
-        <form method="POST" action="/send-panel">
+<form method="POST" action="/send-panel">
 
-          <input
-            type="hidden"
-            name="guildId"
-            value="${guild.id}"
-          >
+<input
+type="hidden"
+name="guildId"
+value="${guild.id}"
+>
 
-          <button class="green" type="submit">
-            🔐 인증 패널 전송
-          </button>
+<button class="green" type="submit">
+🔐 인증 패널 전송
+</button>
 
-        </form>
+</form>
 
-      </div>
-    `;
+<hr>
+
+<h3>💬 채팅</h3>
+
+<label>채팅 채널</label>
+
+<select
+id="chatChannel-${guild.id}"
+onchange="selectChannel('${guild.id}')"
+>
+
+<option value="">
+채널 선택
+</option>
+
+${channels}
+
+</select>
+
+<div
+class="chat"
+id="chat-${guild.id}"
+>
+<div class="empty">
+채널을 선택해 주세요.
+</div>
+</div>
+
+<div class="send">
+
+<input
+id="message-${guild.id}"
+placeholder="메시지를 입력하세요..."
+onkeydown="handleEnter(event,'${guild.id}')"
+>
+
+<button
+onclick="sendMessage('${guild.id}')"
+>
+전송
+</button>
+
+</div>
+
+</div>
+`;
   }).join('');
 
   res.send(`
 <!DOCTYPE html>
+
 <html lang="ko">
+
 <head>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta
+name="viewport"
+content="width=device-width,initial-scale=1"
+>
 
 <title>인증봇 관리자</title>
 
+<script src="/socket.io/socket.io.js"></script>
+
 <style>
+
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
-  background: #111318;
+  background: #0f1117;
   color: white;
   font-family: Arial, sans-serif;
 }
 
 header {
-  padding: 20px;
-  background: #1b1e25;
+  background: #181b23;
+  padding: 18px 25px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-a {
+header a {
   color: #aaa;
   text-decoration: none;
 }
 
 .container {
-  max-width: 900px;
+  max-width: 1000px;
   margin: auto;
   padding: 25px;
 }
 
 .status {
-  background: #1b1e25;
-  padding: 18px;
-  border-radius: 12px;
+  background: #181b23;
+  padding: 20px;
+  border-radius: 14px;
   margin-bottom: 20px;
 }
 
 .server {
-  background: #1b1e25;
-  padding: 20px;
-  border-radius: 12px;
-  margin-bottom: 20px;
+  background: #181b23;
+  padding: 22px;
+  border-radius: 14px;
+  margin-bottom: 25px;
 }
 
 label {
   display: block;
-  margin-top: 15px;
+  margin-top: 14px;
   margin-bottom: 6px;
 }
 
-select {
+select,
+.send input {
   width: 100%;
   padding: 12px;
-  background: #101218;
+  background: #0f1117;
   color: white;
-  border: 1px solid #444;
+  border: 1px solid #343846;
   border-radius: 8px;
 }
 
 button {
-  width: 100%;
   padding: 12px;
-  margin-top: 15px;
+  margin-top: 12px;
   border: 0;
   border-radius: 8px;
   background: #5865f2;
@@ -345,6 +454,63 @@ button {
 
 .green {
   background: #23a55a;
+  width: 100%;
+}
+
+.chat {
+  height: 350px;
+  overflow-y: auto;
+  background: #0d0f14;
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.message {
+  margin-bottom: 12px;
+}
+
+.author {
+  font-weight: bold;
+  color: #8ea1ff;
+}
+
+.time {
+  font-size: 11px;
+  color: #777;
+  margin-left: 5px;
+}
+
+.content {
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+.empty {
+  color: #777;
+  text-align: center;
+  margin-top: 130px;
+}
+
+.send {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.send input {
+  flex: 1;
+}
+
+.send button {
+  width: 80px;
+  margin-top: 0;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid #30333d;
+  margin: 25px 0;
 }
 
 </style>
@@ -370,9 +536,11 @@ button {
 <h2>봇 상태</h2>
 
 <p>
-${client.isReady()
-  ? '🟢 온라인'
-  : '🔴 오프라인'}
+${
+  client.isReady()
+    ? '🟢 온라인'
+    : '🔴 오프라인'
+}
 </p>
 
 <p>
@@ -387,18 +555,186 @@ ${guilds || '<p>봇이 들어가 있는 서버가 없습니다.</p>'}
 
 </div>
 
+<script>
+
+const socket = io();
+
+const selectedChannels = {};
+
+function selectChannel(guildId) {
+
+  const select =
+    document.getElementById(
+      'chatChannel-' + guildId
+    );
+
+  selectedChannels[guildId] = select.value;
+
+  const chat =
+    document.getElementById(
+      'chat-' + guildId
+    );
+
+  chat.innerHTML =
+    '<div class="empty">' +
+    '새로운 메시지를 기다리는 중입니다.' +
+    '</div>';
+}
+
+socket.on('discordMessage', data => {
+
+  if (!selectedChannels[data.guildId]) {
+    return;
+  }
+
+  if (
+    selectedChannels[data.guildId] !==
+    data.channelId
+  ) {
+    return;
+  }
+
+  addMessage(data);
+});
+
+function addMessage(data) {
+
+  const chat =
+    document.getElementById(
+      'chat-' + data.guildId
+    );
+
+  if (!chat) return;
+
+  const empty =
+    chat.querySelector('.empty');
+
+  if (empty) {
+    empty.remove();
+  }
+
+  const message =
+    document.createElement('div');
+
+  message.className = 'message';
+
+  const author =
+    document.createElement('span');
+
+  author.className = 'author';
+
+  author.textContent =
+    data.author;
+
+  const time =
+    document.createElement('span');
+
+  time.className = 'time';
+
+  time.textContent =
+    new Date(data.timestamp)
+      .toLocaleTimeString();
+
+  const content =
+    document.createElement('div');
+
+  content.className = 'content';
+
+  content.textContent =
+    data.content;
+
+  message.appendChild(author);
+  message.appendChild(time);
+  message.appendChild(content);
+
+  chat.appendChild(message);
+
+  chat.scrollTop =
+    chat.scrollHeight;
+}
+
+async function sendMessage(guildId) {
+
+  const channelId =
+    selectedChannels[guildId];
+
+  const input =
+    document.getElementById(
+      'message-' + guildId
+    );
+
+  const content =
+    input.value.trim();
+
+  if (!channelId) {
+    alert('채팅 채널을 먼저 선택해 주세요.');
+    return;
+  }
+
+  if (!content) {
+    return;
+  }
+
+  const response =
+    await fetch('/api/send-message', {
+
+      method: 'POST',
+
+      headers: {
+        'Content-Type':
+          'application/json'
+      },
+
+      body: JSON.stringify({
+        guildId,
+        channelId,
+        content
+      })
+
+    });
+
+  const result =
+    await response.json();
+
+  if (!result.ok) {
+    alert(
+      result.error ||
+      '메시지 전송에 실패했습니다.'
+    );
+
+    return;
+  }
+
+  input.value = '';
+}
+
+function handleEnter(event, guildId) {
+
+  if (event.key === 'Enter') {
+    sendMessage(guildId);
+  }
+
+}
+
+</script>
+
 </body>
+
 </html>
   `);
 });
 
 // ========================================
-// 설정 저장
+// 서버 설정 저장
 // ========================================
 
 app.post('/save', requireLogin, (req, res) => {
 
-  const { guildId, roleId, channelId } = req.body;
+  const {
+    guildId,
+    roleId,
+    channelId
+  } = req.body;
 
   guildSettings.set(guildId, {
     roleId,
@@ -412,159 +748,280 @@ app.post('/save', requireLogin, (req, res) => {
 // 인증 패널 전송
 // ========================================
 
-app.post('/send-panel', requireLogin, async (req, res) => {
+app.post(
+  '/send-panel',
+  requireLogin,
+  async (req, res) => {
 
-  const { guildId } = req.body;
+    const { guildId } = req.body;
 
-  const settings = guildSettings.get(guildId);
+    const settings =
+      guildSettings.get(guildId);
 
-  if (!settings || !settings.roleId || !settings.channelId) {
-    return res.send(`
-      <script>
-        alert('먼저 인증 역할과 인증 채널을 설정해 주세요.');
-        location.href='/';
-      </script>
-    `);
+    if (
+      !settings ||
+      !settings.roleId ||
+      !settings.channelId
+    ) {
+      return res.send(`
+<script>
+alert('먼저 인증 역할과 인증 채널을 설정해 주세요.');
+location.href='/';
+</script>
+      `);
+    }
+
+    const guild =
+      client.guilds.cache.get(guildId);
+
+    if (!guild) {
+      return res.send(`
+<script>
+alert('서버를 찾을 수 없습니다.');
+location.href='/';
+</script>
+      `);
+    }
+
+    const channel =
+      guild.channels.cache.get(
+        settings.channelId
+      );
+
+    if (
+      !channel ||
+      !channel.isTextBased()
+    ) {
+      return res.send(`
+<script>
+alert('인증 채널을 찾을 수 없습니다.');
+location.href='/';
+</script>
+      `);
+    }
+
+    const embed =
+      new EmbedBuilder()
+        .setTitle('🔐 서버 인증')
+        .setDescription(
+          '서버 이용을 시작하시려면 아래 **인증하기** 버튼을 눌러주세요.\n\n' +
+          '인증이 완료되면 자동으로 인증 역할이 지급됩니다.'
+        )
+        .setColor(0x5865F2)
+        .setFooter({
+          text: '인증봇'
+        });
+
+    const button =
+      new ButtonBuilder()
+        .setCustomId('verify')
+        .setLabel('인증하기')
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success);
+
+    const row =
+      new ActionRowBuilder()
+        .addComponents(button);
+
+    try {
+
+      await channel.send({
+        embeds: [embed],
+        components: [row]
+      });
+
+      res.send(`
+<script>
+alert('인증 패널을 전송했습니다.');
+location.href='/';
+</script>
+      `);
+
+    } catch (error) {
+
+      console.error(error);
+
+      res.send(`
+<script>
+alert('인증 패널 전송에 실패했습니다.');
+location.href='/';
+</script>
+      `);
+    }
   }
+);
 
-  const guild = client.guilds.cache.get(guildId);
+// ========================================
+// 웹 → Discord 메시지
+// ========================================
 
-  if (!guild) {
-    return res.send(`
-      <script>
-        alert('서버를 찾을 수 없습니다.');
-        location.href='/';
-      </script>
-    `);
+app.post(
+  '/api/send-message',
+  requireLogin,
+  async (req, res) => {
+
+    const {
+      guildId,
+      channelId,
+      content
+    } = req.body;
+
+    if (
+      typeof content !== 'string' ||
+      !content.trim()
+    ) {
+      return res.json({
+        ok: false,
+        error: '메시지를 입력해 주세요.'
+      });
+    }
+
+    if (content.length > 2000) {
+      return res.json({
+        ok: false,
+        error:
+          'Discord 메시지는 2000자를 초과할 수 없습니다.'
+      });
+    }
+
+    const guild =
+      client.guilds.cache.get(guildId);
+
+    if (!guild) {
+      return res.json({
+        ok: false,
+        error: '서버를 찾을 수 없습니다.'
+      });
+    }
+
+    const channel =
+      guild.channels.cache.get(channelId);
+
+    if (
+      !channel ||
+      !channel.isTextBased()
+    ) {
+      return res.json({
+        ok: false,
+        error: '채널을 찾을 수 없습니다.'
+      });
+    }
+
+    try {
+
+      await channel.send({
+        content: content.trim()
+      });
+
+      return res.json({
+        ok: true
+      });
+
+    } catch (error) {
+
+      console.error(
+        '메시지 전송 오류:',
+        error
+      );
+
+      return res.json({
+        ok: false,
+        error:
+          'Discord에 메시지를 전송하지 못했습니다.'
+      });
+    }
   }
-
-  const channel = guild.channels.cache.get(settings.channelId);
-
-  if (!channel || !channel.isTextBased()) {
-    return res.send(`
-      <script>
-        alert('인증 채널을 찾을 수 없습니다.');
-        location.href='/';
-      </script>
-    `);
-  }
-
-  const embed = new EmbedBuilder()
-    .setTitle('🔐 서버 인증')
-    .setDescription(
-      '서버 이용을 시작하시려면 아래 **인증하기** 버튼을 눌러주세요.\\n\\n' +
-      '인증이 완료되면 자동으로 인증 역할이 지급됩니다.'
-    )
-    .setColor(0x5865F2)
-    .setFooter({
-      text: '인증봇'
-    });
-
-  const button = new ButtonBuilder()
-    .setCustomId('verify')
-    .setLabel('인증하기')
-    .setEmoji('✅')
-    .setStyle(ButtonStyle.Success);
-
-  const row = new ActionRowBuilder()
-    .addComponents(button);
-
-  try {
-
-    await channel.send({
-      embeds: [embed],
-      components: [row]
-    });
-
-    res.send(`
-      <script>
-        alert('인증 패널을 전송했습니다.');
-        location.href='/';
-      </script>
-    `);
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.send(`
-      <script>
-        alert('인증 패널 전송에 실패했습니다.');
-        location.href='/';
-      </script>
-    `);
-  }
-});
+);
 
 // ========================================
 // 인증 버튼
 // ========================================
 
-client.on('interactionCreate', async interaction => {
+client.on(
+  'interactionCreate',
+  async interaction => {
 
-  if (!interaction.isButton()) return;
+    if (!interaction.isButton()) {
+      return;
+    }
 
-  if (interaction.customId !== 'verify') return;
+    if (interaction.customId !== 'verify') {
+      return;
+    }
 
-  const settings = guildSettings.get(
-    interaction.guild.id
-  );
+    const settings =
+      guildSettings.get(
+        interaction.guild.id
+      );
 
-  if (!settings || !settings.roleId) {
-    return interaction.reply({
-      content:
-        '❌ 이 서버의 인증 역할이 설정되지 않았습니다.',
-      ephemeral: true
-    });
+    if (
+      !settings ||
+      !settings.roleId
+    ) {
+      return interaction.reply({
+        content:
+          '❌ 이 서버의 인증 역할이 설정되지 않았습니다.',
+        ephemeral: true
+      });
+    }
+
+    const role =
+      interaction.guild.roles.cache.get(
+        settings.roleId
+      );
+
+    if (!role) {
+      return interaction.reply({
+        content:
+          '❌ 인증 역할을 찾을 수 없습니다. 서버 관리자에게 문의해 주세요.',
+        ephemeral: true
+      });
+    }
+
+    if (
+      interaction.member.roles.cache.has(
+        role.id
+      )
+    ) {
+      return interaction.reply({
+        content:
+          '✅ 이미 인증이 완료되었습니다.',
+        ephemeral: true
+      });
+    }
+
+    try {
+
+      await interaction.member.roles.add(
+        role
+      );
+
+      await interaction.reply({
+        content:
+          `✅ 인증이 완료되었습니다!\n${role} 역할이 지급되었습니다.`,
+        ephemeral: true
+      });
+
+    } catch (error) {
+
+      console.error(error);
+
+      await interaction.reply({
+        content:
+          '❌ 역할 지급에 실패했습니다.\n' +
+          '봇의 역할 위치와 역할 관리 권한을 확인해 주세요.',
+        ephemeral: true
+      });
+    }
   }
-
-  const role = interaction.guild.roles.cache.get(
-    settings.roleId
-  );
-
-  if (!role) {
-    return interaction.reply({
-      content:
-        '❌ 인증 역할을 찾을 수 없습니다. 서버 관리자에게 문의해 주세요.',
-      ephemeral: true
-    });
-  }
-
-  if (interaction.member.roles.cache.has(role.id)) {
-    return interaction.reply({
-      content: '✅ 이미 인증이 완료되었습니다.',
-      ephemeral: true
-    });
-  }
-
-  try {
-
-    await interaction.member.roles.add(role);
-
-    await interaction.reply({
-      content:
-        `✅ 인증이 완료되었습니다!\n${role} 역할이 지급되었습니다.`,
-      ephemeral: true
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    await interaction.reply({
-      content:
-        '❌ 역할 지급에 실패했습니다.\n' +
-        '봇의 역할 위치와 역할 관리 권한을 확인해 주세요.',
-      ephemeral: true
-    });
-  }
-});
+);
 
 // ========================================
-// HTML 특수문자 처리
+// HTML 보안 처리
 // ========================================
 
 function escapeHtml(text) {
+
   return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -577,6 +1034,10 @@ function escapeHtml(text) {
 // 웹 서버
 // ========================================
 
-app.listen(PORT, () => {
-  console.log(`웹 관리자 페이지 실행: ${PORT}`);
+server.listen(PORT, () => {
+
+  console.log(
+    `웹 관리자 페이지 실행: ${PORT}`
+  );
+
 });
