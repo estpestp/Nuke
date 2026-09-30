@@ -1,12 +1,13 @@
 {
-  "name": "discord-verification-bot",
+  "name": "discord-verification-dashboard",
   "version": "1.0.0",
-  "description": "Discord Verification Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.22.1"
+    "discord.js": "^14.22.1",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1"
   }
 }
