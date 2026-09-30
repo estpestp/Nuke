@@ -44,13 +44,13 @@ app.use(
 );
 
 // ========================================
-// 서버 설정
+// 서버별 설정
 // ========================================
 
 const guildSettings = new Map();
 
 // ========================================
-// Discord
+// Discord 봇
 // ========================================
 
 const client = new Client({
@@ -62,23 +62,54 @@ const client = new Client({
 });
 
 // ========================================
-// 로그인
+// 봇 상태
 // ========================================
 
-function requireLogin(req, res, next) {
-  if (!req.session.loggedIn) {
-    return res.redirect('/login');
-  }
+function getBotStatus() {
+  return {
+    online: client.isReady(),
+    username: client.user?.tag || null,
+    guildCount: client.guilds.cache.size
+  };
+}
 
-  next();
+function broadcastBotStatus() {
+  io.emit('botStatus', getBotStatus());
 }
 
 // ========================================
-// Discord 준비
+// Discord 준비 완료
 // ========================================
 
 client.once('ready', () => {
   console.log(`Discord 로그인 완료: ${client.user.tag}`);
+
+  broadcastBotStatus();
+});
+
+// Discord 연결 복구
+client.on('shardReady', () => {
+  console.log('Discord 연결이 준비되었습니다.');
+
+  broadcastBotStatus();
+});
+
+// Discord 연결 종료
+client.on('shardDisconnect', () => {
+  console.log('Discord 연결이 종료되었습니다.');
+
+  io.emit('botStatus', {
+    online: false,
+    username: null,
+    guildCount: 0
+  });
+});
+
+// Discord 연결 재개
+client.on('shardResume', () => {
+  console.log('Discord 연결이 재개되었습니다.');
+
+  broadcastBotStatus();
 });
 
 // ========================================
@@ -86,6 +117,7 @@ client.once('ready', () => {
 // ========================================
 
 client.on('messageCreate', message => {
+
   if (!message.guild) return;
 
   console.log(
@@ -93,7 +125,6 @@ client.on('messageCreate', message => {
     `${message.author.username}: ${message.content}`
   );
 
-  // 웹 관리자에게 실시간 전달
   io.emit('discordMessage', {
     guildId: message.guild.id,
     guildName: message.guild.name,
@@ -108,20 +139,41 @@ client.on('messageCreate', message => {
 });
 
 // ========================================
+// 로그인 확인
+// ========================================
+
+function requireLogin(req, res, next) {
+
+  if (!req.session.loggedIn) {
+    return res.redirect('/login');
+  }
+
+  next();
+}
+
+// ========================================
 // 로그인 페이지
 // ========================================
 
 app.get('/login', (req, res) => {
+
   res.send(`
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<meta
+name="viewport"
+content="width=device-width,initial-scale=1"
+>
 
 <title>인증봇 로그인</title>
 
 <style>
+
 * {
   box-sizing: border-box;
 }
@@ -132,6 +184,7 @@ body {
   background: #0f1117;
   color: white;
   font-family: Arial, sans-serif;
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -153,8 +206,10 @@ input {
   width: 100%;
   padding: 14px;
   margin: 15px 0;
+
   background: #0f1117;
   color: white;
+
   border: 1px solid #343846;
   border-radius: 9px;
 }
@@ -162,14 +217,19 @@ input {
 button {
   width: 100%;
   padding: 14px;
+
   background: #5865f2;
   color: white;
+
   border: 0;
   border-radius: 9px;
+
   cursor: pointer;
   font-weight: bold;
 }
+
 </style>
+
 </head>
 
 <body>
@@ -198,6 +258,7 @@ required
 </div>
 
 </body>
+
 </html>
   `);
 });
@@ -207,11 +268,16 @@ required
 // ========================================
 
 app.post('/login', (req, res) => {
+
   if (req.body.password !== ADMIN_PASSWORD) {
+
     return res.send(`
 <script>
+
 alert('비밀번호가 올바르지 않습니다.');
+
 location.href='/login';
+
 </script>
     `);
   }
@@ -226,9 +292,11 @@ location.href='/login';
 // ========================================
 
 app.get('/logout', (req, res) => {
+
   req.session.destroy(() => {
     res.redirect('/login');
   });
+
 });
 
 // ========================================
@@ -242,31 +310,40 @@ app.get('/', requireLogin, (req, res) => {
     const settings =
       guildSettings.get(guild.id) || {};
 
-    const roles = guild.roles.cache
-      .filter(role => role.id !== guild.id)
-      .map(role => `
+    const roles =
+      guild.roles.cache
+
+        .filter(role => role.id !== guild.id)
+
+        .map(role => `
 <option
 value="${role.id}"
 ${settings.roleId === role.id ? 'selected' : ''}
 >
 ${escapeHtml(role.name)}
 </option>
-      `)
-      .join('');
+        `)
 
-    const channels = guild.channels.cache
-      .filter(channel => channel.isTextBased())
-      .map(channel => `
+        .join('');
+
+    const channels =
+      guild.channels.cache
+
+        .filter(channel => channel.isTextBased())
+
+        .map(channel => `
 <option
 value="${channel.id}"
 ${settings.channelId === channel.id ? 'selected' : ''}
 >
 # ${escapeHtml(channel.name)}
 </option>
-      `)
-      .join('');
+        `)
+
+        .join('');
 
     return `
+
 <div class="server">
 
 <h2>🏠 ${escapeHtml(guild.name)}</h2>
@@ -282,15 +359,25 @@ value="${guild.id}"
 <label>인증 역할</label>
 
 <select name="roleId">
-<option value="">역할 선택</option>
+
+<option value="">
+역할 선택
+</option>
+
 ${roles}
+
 </select>
 
 <label>인증 채널</label>
 
 <select name="channelId">
-<option value="">채널 선택</option>
+
+<option value="">
+채널 선택
+</option>
+
 ${channels}
+
 </select>
 
 <button type="submit">
@@ -299,7 +386,10 @@ ${channels}
 
 </form>
 
-<form method="POST" action="/send-panel">
+<form
+method="POST"
+action="/send-panel"
+>
 
 <input
 type="hidden"
@@ -307,7 +397,10 @@ name="guildId"
 value="${guild.id}"
 >
 
-<button class="green" type="submit">
+<button
+class="green"
+type="submit"
+>
 🔐 인증 패널 전송
 </button>
 
@@ -317,7 +410,9 @@ value="${guild.id}"
 
 <h3>💬 채팅</h3>
 
-<label>채팅 채널</label>
+<label>
+채팅 채널
+</label>
 
 <select
 id="chatChannel-${guild.id}"
@@ -336,9 +431,11 @@ ${channels}
 class="chat"
 id="chat-${guild.id}"
 >
+
 <div class="empty">
 채널을 선택해 주세요.
 </div>
+
 </div>
 
 <div class="send">
@@ -358,10 +455,16 @@ onclick="sendMessage('${guild.id}')"
 </div>
 
 </div>
+
 `;
+
   }).join('');
 
+  const status =
+    getBotStatus();
+
   res.send(`
+
 <!DOCTYPE html>
 
 <html lang="ko">
@@ -393,11 +496,17 @@ body {
 }
 
 header {
+
   background: #181b23;
+
   padding: 18px 25px;
+
   display: flex;
+
   justify-content: space-between;
+
   align-items: center;
+
 }
 
 header a {
@@ -406,64 +515,108 @@ header a {
 }
 
 .container {
+
   max-width: 1000px;
+
   margin: auto;
+
   padding: 25px;
+
 }
 
 .status {
+
   background: #181b23;
+
   padding: 20px;
+
   border-radius: 14px;
+
   margin-bottom: 20px;
+
 }
 
 .server {
+
   background: #181b23;
+
   padding: 22px;
+
   border-radius: 14px;
+
   margin-bottom: 25px;
+
 }
 
 label {
+
   display: block;
+
   margin-top: 14px;
+
   margin-bottom: 6px;
+
 }
 
 select,
 .send input {
+
   width: 100%;
+
   padding: 12px;
+
   background: #0f1117;
+
   color: white;
+
   border: 1px solid #343846;
+
   border-radius: 8px;
+
 }
 
 button {
+
   padding: 12px;
+
   margin-top: 12px;
+
   border: 0;
+
   border-radius: 8px;
+
   background: #5865f2;
+
   color: white;
+
   font-weight: bold;
+
   cursor: pointer;
+
 }
 
 .green {
+
   background: #23a55a;
+
   width: 100%;
+
 }
 
 .chat {
+
   height: 350px;
+
   overflow-y: auto;
+
   background: #0d0f14;
+
   border-radius: 10px;
+
   padding: 12px;
+
   margin-top: 10px;
+
 }
 
 .message {
@@ -471,31 +624,49 @@ button {
 }
 
 .author {
+
   font-weight: bold;
+
   color: #8ea1ff;
+
 }
 
 .time {
+
   font-size: 11px;
+
   color: #777;
+
   margin-left: 5px;
+
 }
 
 .content {
+
   margin-top: 3px;
+
   word-break: break-word;
+
 }
 
 .empty {
+
   color: #777;
+
   text-align: center;
+
   margin-top: 130px;
+
 }
 
 .send {
+
   display: flex;
+
   gap: 8px;
+
   margin-top: 8px;
+
 }
 
 .send input {
@@ -503,14 +674,21 @@ button {
 }
 
 .send button {
+
   width: 80px;
+
   margin-top: 0;
+
 }
 
 hr {
+
   border: 0;
+
   border-top: 1px solid #30333d;
+
   margin: 25px 0;
+
 }
 
 </style>
@@ -521,7 +699,9 @@ hr {
 
 <header>
 
-<strong>🤖 인증봇 관리자</strong>
+<strong>
+🤖 인증봇 관리자
+</strong>
 
 <a href="/logout">
 로그아웃
@@ -535,21 +715,37 @@ hr {
 
 <h2>봇 상태</h2>
 
-<p>
+<p id="botStatus">
+
 ${
-  client.isReady()
+  status.online
     ? '🟢 온라인'
     : '🔴 오프라인'
 }
+
 </p>
 
-<p>
-서버 수: ${client.guilds.cache.size}
+<p id="botName">
+
+${
+  status.username
+    ? escapeHtml(status.username)
+    : ''
+}
+
+</p>
+
+<p id="guildCount">
+
+서버 수: ${status.guildCount}
+
 </p>
 
 </div>
 
-<h2>서버 관리</h2>
+<h2>
+서버 관리
+</h2>
 
 ${guilds || '<p>봇이 들어가 있는 서버가 없습니다.</p>'}
 
@@ -561,6 +757,62 @@ const socket = io();
 
 const selectedChannels = {};
 
+
+// ========================================
+// 실시간 봇 상태
+// ========================================
+
+socket.on('botStatus', data => {
+
+  const status =
+    document.getElementById(
+      'botStatus'
+    );
+
+  const name =
+    document.getElementById(
+      'botName'
+    );
+
+  const count =
+    document.getElementById(
+      'guildCount'
+    );
+
+  if (!status) return;
+
+  if (data.online) {
+
+    status.textContent =
+      '🟢 온라인';
+
+    name.textContent =
+      data.username || '';
+
+    count.textContent =
+      '서버 수: ' +
+      (data.guildCount || 0);
+
+  } else {
+
+    status.textContent =
+      '🔴 오프라인';
+
+    name.textContent =
+      '';
+
+    count.textContent =
+      '서버 수: 0';
+
+  }
+
+});
+
+
+// ========================================
+// 채널 선택
+// ========================================
+
 function selectChannel(guildId) {
 
   const select =
@@ -568,7 +820,8 @@ function selectChannel(guildId) {
       'chatChannel-' + guildId
     );
 
-  selectedChannels[guildId] = select.value;
+  selectedChannels[guildId] =
+    select.value;
 
   const chat =
     document.getElementById(
@@ -579,23 +832,40 @@ function selectChannel(guildId) {
     '<div class="empty">' +
     '새로운 메시지를 기다리는 중입니다.' +
     '</div>';
+
 }
 
-socket.on('discordMessage', data => {
 
-  if (!selectedChannels[data.guildId]) {
-    return;
+// ========================================
+// Discord 메시지 수신
+// ========================================
+
+socket.on(
+  'discordMessage',
+  data => {
+
+    if (
+      !selectedChannels[data.guildId]
+    ) {
+      return;
+    }
+
+    if (
+      selectedChannels[data.guildId] !==
+      data.channelId
+    ) {
+      return;
+    }
+
+    addMessage(data);
+
   }
+);
 
-  if (
-    selectedChannels[data.guildId] !==
-    data.channelId
-  ) {
-    return;
-  }
 
-  addMessage(data);
-});
+// ========================================
+// 메시지 화면 추가
+// ========================================
 
 function addMessage(data) {
 
@@ -614,46 +884,77 @@ function addMessage(data) {
   }
 
   const message =
-    document.createElement('div');
+    document.createElement(
+      'div'
+    );
 
-  message.className = 'message';
+  message.className =
+    'message';
 
   const author =
-    document.createElement('span');
+    document.createElement(
+      'span'
+    );
 
-  author.className = 'author';
+  author.className =
+    'author';
 
   author.textContent =
     data.author;
 
   const time =
-    document.createElement('span');
+    document.createElement(
+      'span'
+    );
 
-  time.className = 'time';
+  time.className =
+    'time';
 
   time.textContent =
-    new Date(data.timestamp)
-      .toLocaleTimeString();
+    new Date(
+      data.timestamp
+    ).toLocaleTimeString();
 
   const content =
-    document.createElement('div');
+    document.createElement(
+      'div'
+    );
 
-  content.className = 'content';
+  content.className =
+    'content';
 
   content.textContent =
     data.content;
 
-  message.appendChild(author);
-  message.appendChild(time);
-  message.appendChild(content);
+  message.appendChild(
+    author
+  );
 
-  chat.appendChild(message);
+  message.appendChild(
+    time
+  );
+
+  message.appendChild(
+    content
+  );
+
+  chat.appendChild(
+    message
+  );
 
   chat.scrollTop =
     chat.scrollHeight;
+
 }
 
-async function sendMessage(guildId) {
+
+// ========================================
+// 웹 → Discord 메시지
+// ========================================
+
+async function sendMessage(
+  guildId
+) {
 
   const channelId =
     selectedChannels[guildId];
@@ -667,7 +968,11 @@ async function sendMessage(guildId) {
     input.value.trim();
 
   if (!channelId) {
-    alert('채팅 채널을 먼저 선택해 주세요.');
+
+    alert(
+      '채팅 채널을 먼저 선택해 주세요.'
+    );
+
     return;
   }
 
@@ -676,27 +981,29 @@ async function sendMessage(guildId) {
   }
 
   const response =
-    await fetch('/api/send-message', {
+    await fetch(
+      '/api/send-message',
+      {
+        method: 'POST',
 
-      method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
 
-      headers: {
-        'Content-Type':
-          'application/json'
-      },
-
-      body: JSON.stringify({
-        guildId,
-        channelId,
-        content
-      })
-
-    });
+        body: JSON.stringify({
+          guildId,
+          channelId,
+          content
+        })
+      }
+    );
 
   const result =
     await response.json();
 
   if (!result.ok) {
+
     alert(
       result.error ||
       '메시지 전송에 실패했습니다.'
@@ -706,12 +1013,25 @@ async function sendMessage(guildId) {
   }
 
   input.value = '';
+
 }
 
-function handleEnter(event, guildId) {
+
+// ========================================
+// Enter 전송
+// ========================================
+
+function handleEnter(
+  event,
+  guildId
+) {
 
   if (event.key === 'Enter') {
+
+    event.preventDefault();
+
     sendMessage(guildId);
+
   }
 
 }
@@ -721,6 +1041,7 @@ function handleEnter(event, guildId) {
 </body>
 
 </html>
+
   `);
 });
 
@@ -728,21 +1049,29 @@ function handleEnter(event, guildId) {
 // 서버 설정 저장
 // ========================================
 
-app.post('/save', requireLogin, (req, res) => {
+app.post(
+  '/save',
+  requireLogin,
+  (req, res) => {
 
-  const {
-    guildId,
-    roleId,
-    channelId
-  } = req.body;
+    const {
+      guildId,
+      roleId,
+      channelId
+    } = req.body;
 
-  guildSettings.set(guildId, {
-    roleId,
-    channelId
-  });
+    guildSettings.set(
+      guildId,
+      {
+        roleId,
+        channelId
+      }
+    );
 
-  res.redirect('/');
-});
+    res.redirect('/');
+
+  }
+);
 
 // ========================================
 // 인증 패널 전송
@@ -753,7 +1082,8 @@ app.post(
   requireLogin,
   async (req, res) => {
 
-    const { guildId } = req.body;
+    const { guildId } =
+      req.body;
 
     const settings =
       guildSettings.get(guildId);
@@ -763,24 +1093,40 @@ app.post(
       !settings.roleId ||
       !settings.channelId
     ) {
+
       return res.send(`
 <script>
-alert('먼저 인증 역할과 인증 채널을 설정해 주세요.');
+
+alert(
+'먼저 인증 역할과 인증 채널을 설정해 주세요.'
+);
+
 location.href='/';
+
 </script>
       `);
+
     }
 
     const guild =
-      client.guilds.cache.get(guildId);
+      client.guilds.cache.get(
+        guildId
+      );
 
     if (!guild) {
+
       return res.send(`
 <script>
-alert('서버를 찾을 수 없습니다.');
+
+alert(
+'서버를 찾을 수 없습니다.'
+);
+
 location.href='/';
+
 </script>
       `);
+
     }
 
     const channel =
@@ -792,36 +1138,63 @@ location.href='/';
       !channel ||
       !channel.isTextBased()
     ) {
+
       return res.send(`
 <script>
-alert('인증 채널을 찾을 수 없습니다.');
+
+alert(
+'인증 채널을 찾을 수 없습니다.'
+);
+
 location.href='/';
+
 </script>
       `);
+
     }
 
     const embed =
       new EmbedBuilder()
-        .setTitle('🔐 서버 인증')
+
+        .setTitle(
+          '🔐 서버 인증'
+        )
+
         .setDescription(
           '서버 이용을 시작하시려면 아래 **인증하기** 버튼을 눌러주세요.\n\n' +
           '인증이 완료되면 자동으로 인증 역할이 지급됩니다.'
         )
+
         .setColor(0x5865F2)
+
         .setFooter({
           text: '인증봇'
         });
 
     const button =
       new ButtonBuilder()
-        .setCustomId('verify')
-        .setLabel('인증하기')
-        .setEmoji('✅')
-        .setStyle(ButtonStyle.Success);
+
+        .setCustomId(
+          'verify'
+        )
+
+        .setLabel(
+          '인증하기'
+        )
+
+        .setEmoji(
+          '✅'
+        )
+
+        .setStyle(
+          ButtonStyle.Success
+        );
 
     const row =
       new ActionRowBuilder()
-        .addComponents(button);
+        .addComponents(
+          button
+        );
 
     try {
 
@@ -832,22 +1205,36 @@ location.href='/';
 
       res.send(`
 <script>
-alert('인증 패널을 전송했습니다.');
+
+alert(
+'인증 패널을 전송했습니다.'
+);
+
 location.href='/';
+
 </script>
       `);
 
     } catch (error) {
 
-      console.error(error);
+      console.error(
+        error
+      );
 
       res.send(`
 <script>
-alert('인증 패널 전송에 실패했습니다.');
+
+alert(
+'인증 패널 전송에 실패했습니다.'
+);
+
 location.href='/';
+
 </script>
       `);
+
     }
+
   }
 );
 
@@ -870,47 +1257,63 @@ app.post(
       typeof content !== 'string' ||
       !content.trim()
     ) {
+
       return res.json({
         ok: false,
-        error: '메시지를 입력해 주세요.'
+        error:
+          '메시지를 입력해 주세요.'
       });
+
     }
 
     if (content.length > 2000) {
+
       return res.json({
         ok: false,
         error:
           'Discord 메시지는 2000자를 초과할 수 없습니다.'
       });
+
     }
 
     const guild =
-      client.guilds.cache.get(guildId);
+      client.guilds.cache.get(
+        guildId
+      );
 
     if (!guild) {
+
       return res.json({
         ok: false,
-        error: '서버를 찾을 수 없습니다.'
+        error:
+          '서버를 찾을 수 없습니다.'
       });
+
     }
 
     const channel =
-      guild.channels.cache.get(channelId);
+      guild.channels.cache.get(
+        channelId
+      );
 
     if (
       !channel ||
       !channel.isTextBased()
     ) {
+
       return res.json({
         ok: false,
-        error: '채널을 찾을 수 없습니다.'
+        error:
+          '채널을 찾을 수 없습니다.'
       });
+
     }
 
     try {
 
       await channel.send({
-        content: content.trim()
+        content:
+          content.trim()
       });
 
       return res.json({
@@ -929,7 +1332,9 @@ app.post(
         error:
           'Discord에 메시지를 전송하지 못했습니다.'
       });
+
     }
+
   }
 );
 
@@ -945,7 +1350,10 @@ client.on(
       return;
     }
 
-    if (interaction.customId !== 'verify') {
+    if (
+      interaction.customId !==
+      'verify'
+    ) {
       return;
     }
 
@@ -958,11 +1366,13 @@ client.on(
       !settings ||
       !settings.roleId
     ) {
+
       return interaction.reply({
         content:
           '❌ 이 서버의 인증 역할이 설정되지 않았습니다.',
         ephemeral: true
       });
+
     }
 
     const role =
@@ -971,11 +1381,13 @@ client.on(
       );
 
     if (!role) {
+
       return interaction.reply({
         content:
           '❌ 인증 역할을 찾을 수 없습니다. 서버 관리자에게 문의해 주세요.',
         ephemeral: true
       });
+
     }
 
     if (
@@ -983,11 +1395,13 @@ client.on(
         role.id
       )
     ) {
+
       return interaction.reply({
         content:
           '✅ 이미 인증이 완료되었습니다.',
         ephemeral: true
       });
+
     }
 
     try {
@@ -1004,7 +1418,9 @@ client.on(
 
     } catch (error) {
 
-      console.error(error);
+      console.error(
+        error
+      );
 
       await interaction.reply({
         content:
@@ -1012,7 +1428,9 @@ client.on(
           '봇의 역할 위치와 역할 관리 권한을 확인해 주세요.',
         ephemeral: true
       });
+
     }
+
   }
 );
 
@@ -1023,21 +1441,40 @@ client.on(
 function escapeHtml(text) {
 
   return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(
+      /&/g,
+      '&amp;'
+    )
+    .replace(
+      /</g,
+      '&lt;'
+    )
+    .replace(
+      />/g,
+      '&gt;'
+    )
+    .replace(
+      /"/g,
+      '&quot;'
+    )
+    .replace(
+      /'/g,
+      '&#039;'
+    );
+
 }
 
 // ========================================
 // 웹 서버
 // ========================================
 
-server.listen(PORT, () => {
+server.listen(
+  PORT,
+  () => {
 
-  console.log(
-    `웹 관리자 페이지 실행: ${PORT}`
-  );
+    console.log(
+      `웹 관리자 페이지 실행: ${PORT}`
+    );
 
-});
+  }
+);
