@@ -2340,8 +2340,8 @@ async function inviteSelected() {
 
     /*
      * 중요:
-     * 여기서 백틱(`)을 사용하면
-     * 서버의 res.send(`...`)와 충돌할 수 있습니다.
+     * 여기서 백틱()을 사용하면
+     * 서버의 와 충돌할 수 있습니다.
      */
     resultBox.textContent =
       '✅ 완료: ' +
