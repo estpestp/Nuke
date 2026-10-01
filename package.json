@@ -9,6 +9,7 @@
     "discord.js": "^14.22.1",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "pg": "^8.16.3"
   }
 }
