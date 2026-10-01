@@ -3099,8 +3099,8 @@ async function inviteSelected() {
         .length;
 
 
-    resultBox.textContent =
-      `✅ 완료: ${success}명 / 실패: ${failed}명`;
+resultBox.textContent =
+  `✅ 완료: ${success}명 / 실패: ${failed}명`;
 
 
   } catch (error) {
