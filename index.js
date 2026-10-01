@@ -90,6 +90,7 @@ if (!DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
+
   ssl: {
     rejectUnauthorized: false
   }
@@ -117,6 +118,8 @@ async function initDatabase() {
 
       access_token TEXT,
 
+      refresh_token TEXT,
+
       expires_at BIGINT,
 
       scope TEXT,
@@ -131,9 +134,21 @@ async function initDatabase() {
 
   `);
 
+
+  // 기존 DB에 refresh_token 컬럼이 없을 경우 추가
+  await pool.query(`
+
+    ALTER TABLE app_users
+
+    ADD COLUMN IF NOT EXISTS refresh_token TEXT;
+
+  `);
+
+
   console.log(
     '✅ PostgreSQL 데이터베이스 준비 완료'
   );
+
 }
 
 
@@ -159,21 +174,26 @@ app.use(
 app.use(
   session({
 
-    secret: SESSION_SECRET,
+    secret:
+      SESSION_SECRET,
 
-    resave: false,
+    resave:
+      false,
 
-    saveUninitialized: false,
+    saveUninitialized:
+      false,
 
     cookie: {
 
-      httpOnly: true,
+      httpOnly:
+        true,
 
       secure:
         process.env.NODE_ENV ===
         'production',
 
-      sameSite: 'lax',
+      sameSite:
+        'lax',
 
       maxAge:
         1000 *
@@ -192,6 +212,14 @@ app.use(
 // ========================================
 
 const guildSettings =
+  new Map();
+
+
+// ========================================
+// OAuth State
+// ========================================
+
+const oauthStates =
   new Map();
 
 
@@ -300,11 +328,14 @@ client.on(
       'botStatus',
       {
 
-        online: false,
+        online:
+          false,
 
-        username: null,
+        username:
+          null,
 
-        guildCount: 0
+        guildCount:
+          0
 
       }
     );
@@ -405,6 +436,166 @@ function requireLogin(
 
 
 // ========================================
+// OAuth State 생성
+// ========================================
+//
+// 인증 패널의 버튼 하나를 여러 사람이 눌러도
+// 동일한 state 때문에 충돌하지 않도록
+// state 안에 guildId를 서명해서 넣는다.
+// ========================================
+
+function createOAuthState(
+  guildId
+) {
+
+  const timestamp =
+    Date.now();
+
+  const nonce =
+    crypto
+      .randomBytes(24)
+      .toString('hex');
+
+  const payload =
+    `${guildId}.${timestamp}.${nonce}`;
+
+  const signature =
+    crypto
+      .createHmac(
+        'sha256',
+        SESSION_SECRET
+      )
+      .update(payload)
+      .digest('hex');
+
+  return Buffer
+    .from(
+      `${payload}.${signature}`
+    )
+    .toString('base64url');
+
+}
+
+
+// ========================================
+// OAuth State 확인
+// ========================================
+
+function verifyOAuthState(
+  state
+) {
+
+  try {
+
+    const decoded =
+      Buffer
+        .from(
+          state,
+          'base64url'
+        )
+        .toString('utf8');
+
+    const parts =
+      decoded.split('.');
+
+    if (parts.length !== 4) {
+      return null;
+    }
+
+    const [
+      guildId,
+      timestampString,
+      nonce,
+      signature
+    ] = parts;
+
+    if (
+      !guildId ||
+      !timestampString ||
+      !nonce ||
+      !signature
+    ) {
+      return null;
+    }
+
+    const payload =
+      `${guildId}.${timestampString}.${nonce}`;
+
+    const expectedSignature =
+      crypto
+        .createHmac(
+          'sha256',
+          SESSION_SECRET
+        )
+        .update(payload)
+        .digest('hex');
+
+    const providedBuffer =
+      Buffer.from(
+        signature,
+        'utf8'
+      );
+
+    const expectedBuffer =
+      Buffer.from(
+        expectedSignature,
+        'utf8'
+      );
+
+    if (
+      providedBuffer.length !==
+      expectedBuffer.length
+    ) {
+      return null;
+    }
+
+    if (
+      !crypto.timingSafeEqual(
+        providedBuffer,
+        expectedBuffer
+      )
+    ) {
+      return null;
+    }
+
+    const timestamp =
+      Number(timestampString);
+
+    if (
+      !Number.isFinite(timestamp)
+    ) {
+      return null;
+    }
+
+    // 10분
+    if (
+      Date.now() -
+      timestamp >
+      10 * 60 * 1000
+    ) {
+      return null;
+    }
+
+    return {
+
+      guildId,
+
+      timestamp,
+
+      nonce
+
+    };
+
+  } catch {
+
+    return null;
+
+  }
+
+}
+
+
+// ========================================
 // OAuth URL 생성
 // ========================================
 
@@ -413,35 +604,39 @@ function createDiscordOAuthURL(
 ) {
 
   const state =
-    crypto.randomBytes(32)
-      .toString('hex');
+    createOAuthState(
+      guildId
+    );
+
+  const params =
+    new URLSearchParams({
+
+      client_id:
+        CLIENT_ID,
+
+      response_type:
+        'code',
+
+      redirect_uri:
+        REDIRECT_URI,
+
+      scope:
+        'identify guilds.join',
+
+      state,
+
+      prompt:
+        'consent'
+
+    });
+
 
   return {
+
     state,
 
     url:
-      'https://discord.com/oauth2/authorize?' +
-
-      new URLSearchParams({
-
-        client_id:
-          CLIENT_ID,
-
-        response_type:
-          'code',
-
-        redirect_uri:
-          REDIRECT_URI,
-
-        scope:
-          'identify guilds.join',
-
-        state,
-
-        prompt:
-          'consent'
-
-      }).toString()
+      `https://discord.com/oauth2/authorize?${params.toString()}`
 
   };
 
@@ -476,6 +671,7 @@ async function discordFetch(
       }
     );
 
+
   const text =
     await response.text();
 
@@ -494,6 +690,7 @@ async function discordFetch(
       text;
 
   }
+
 
   return {
 
@@ -533,6 +730,7 @@ async function exchangeCode(
 
     });
 
+
   const response =
     await fetch(
       `${DISCORD_API}/oauth2/token`,
@@ -553,8 +751,10 @@ async function exchangeCode(
       }
     );
 
+
   const data =
     await response.json();
+
 
   if (!response.ok) {
 
@@ -565,6 +765,7 @@ async function exchangeCode(
     );
 
   }
+
 
   return data;
 
@@ -597,6 +798,7 @@ async function getDiscordUser(
       }
     );
 
+
   if (!response.ok) {
 
     throw new Error(
@@ -605,6 +807,7 @@ async function getDiscordUser(
     );
 
   }
+
 
   return data;
 
@@ -630,6 +833,7 @@ async function saveAppUser(
       1000
     );
 
+
   await pool.query(
 
     `
@@ -645,6 +849,8 @@ async function saveAppUser(
       avatar,
 
       access_token,
+
+      refresh_token,
 
       expires_at,
 
@@ -663,6 +869,7 @@ async function saveAppUser(
       $5,
       $6,
       $7,
+      $8,
       NOW()
 
     )
@@ -684,6 +891,9 @@ async function saveAppUser(
 
       access_token =
         EXCLUDED.access_token,
+
+      refresh_token =
+        EXCLUDED.refresh_token,
 
       expires_at =
         EXCLUDED.expires_at,
@@ -709,6 +919,9 @@ async function saveAppUser(
         null,
 
       tokenData.access_token,
+
+      tokenData.refresh_token ||
+        null,
 
       expiresAt,
 
@@ -759,7 +972,134 @@ async function getAppUsers() {
 
     );
 
+
   return result.rows;
+
+}
+
+
+// ========================================
+// OAuth 토큰 새로고침
+// ========================================
+
+async function refreshUserToken(
+  userId,
+  refreshToken
+) {
+
+  if (!refreshToken) {
+    return null;
+  }
+
+
+  const body =
+    new URLSearchParams({
+
+      client_id:
+        CLIENT_ID,
+
+      client_secret:
+        CLIENT_SECRET,
+
+      grant_type:
+        'refresh_token',
+
+      refresh_token:
+        refreshToken
+
+    });
+
+
+  const response =
+    await fetch(
+      `${DISCORD_API}/oauth2/token`,
+      {
+
+        method:
+          'POST',
+
+        headers: {
+
+          'Content-Type':
+            'application/x-www-form-urlencoded'
+
+        },
+
+        body
+
+      }
+    );
+
+
+  const data =
+    await response.json();
+
+
+  if (!response.ok) {
+
+    console.error(
+      'OAuth 토큰 갱신 실패:',
+      data
+    );
+
+    return null;
+
+  }
+
+
+  const expiresAt =
+    Date.now() +
+    (
+      Number(
+        data.expires_in ||
+        604800
+      ) *
+      1000
+    );
+
+
+  await pool.query(
+
+    `
+
+    UPDATE app_users
+
+    SET
+
+      access_token = $1,
+
+      refresh_token = $2,
+
+      expires_at = $3,
+
+      scope = $4,
+
+      updated_at = NOW()
+
+    WHERE discord_user_id = $5
+
+    `,
+
+    [
+
+      data.access_token,
+
+      data.refresh_token ||
+        refreshToken,
+
+      expiresAt,
+
+      data.scope ||
+        '',
+
+      userId
+
+    ]
+
+  );
+
+
+  return data.access_token;
 
 }
 
@@ -781,6 +1121,8 @@ async function getUserToken(
 
         access_token,
 
+        refresh_token,
+
         expires_at,
 
         scope
@@ -795,6 +1137,7 @@ async function getUserToken(
 
     );
 
+
   if (
     result.rows.length === 0
   ) {
@@ -803,28 +1146,36 @@ async function getUserToken(
 
   }
 
+
   const row =
     result.rows[0];
 
-  if (
-    !row.access_token
-  ) {
-
-    return null;
-
-  }
 
   if (
+    row.access_token &&
     row.expires_at &&
-    Number(row.expires_at) <
-      Date.now()
+    Number(row.expires_at) >
+      Date.now() + 60 * 1000
   ) {
 
-    return null;
+    return row.access_token;
 
   }
 
-  return row.access_token;
+
+  if (
+    row.refresh_token
+  ) {
+
+    return await refreshUserToken(
+      userId,
+      row.refresh_token
+    );
+
+  }
+
+
+  return null;
 
 }
 
@@ -847,6 +1198,7 @@ async function addUserToGuild(
 
   };
 
+
   if (roleId) {
 
     body.roles = [
@@ -854,6 +1206,7 @@ async function addUserToGuild(
     ];
 
   }
+
 
   const {
     response,
@@ -882,12 +1235,11 @@ async function addUserToGuild(
 
     );
 
+
   return {
 
     ok:
-      response.ok ||
-      response.status === 201 ||
-      response.status === 204,
+      response.ok,
 
     status:
       response.status,
@@ -1086,8 +1438,10 @@ location.href =
 
     }
 
+
     req.session.loggedIn =
       true;
+
 
     res.redirect('/');
 
@@ -1135,6 +1489,7 @@ app.get(
               guild.id
             ) || {};
 
+
           const roles =
             guild.roles.cache
 
@@ -1162,6 +1517,7 @@ ${escapeHtml(role.name)}
 
               .join('');
 
+
           const channels =
             guild.channels.cache
 
@@ -1188,6 +1544,7 @@ ${
               )
 
               .join('');
+
 
           return `
 
@@ -1963,9 +2320,11 @@ socket.on(
         'guildCount'
       );
 
+
     if (!status) {
       return;
     }
+
 
     if (data.online) {
 
@@ -2013,6 +2372,7 @@ function selectChannel(
       'chatChannel-' +
       guildId
     );
+
 
   selectedChannels[guildId] =
     select.value;
@@ -2366,83 +2726,194 @@ async function openInvite(
     }
 
 
+    // 기존 방식처럼 중첩 템플릿 문자열을
+    // 사용하지 않고 DOM으로 직접 생성한다.
+    // 따라서 Render의 SyntaxError를 방지한다.
+
     list.innerHTML =
-      result.users
-        .map(
-          user => `
+      '';
 
-<div class="user">
 
-<input
-type="checkbox"
-class="invite-user"
-value="${user.discord_user_id}"
->
+    result.users.forEach(
+      function(user) {
 
-${
-  user.avatar
-    ? `
+        const userBox =
+          document.createElement(
+            'div'
+          );
 
-<img
-src="https://cdn.discordapp.com/avatars/${user.discord_user_id}/${user.avatar}.png?size=128"
->
+        userBox.className =
+          'user';
 
-`
-    : `
 
-<div
-style="
-width:40px;
-height:40px;
-border-radius:50%;
-background:#5865f2;
-display:flex;
-align-items:center;
-justify-content:center;
-"
->
-👤
-</div>
+        const checkbox =
+          document.createElement(
+            'input'
+          );
 
-`
-}
+        checkbox.type =
+          'checkbox';
 
-<div class="user-info">
+        checkbox.className =
+          'invite-user';
 
-<div class="user-name">
+        checkbox.value =
+          user.discord_user_id;
 
-${escapeClient(
-  user.global_name ||
-  user.username
-)}
 
-</div>
+        userBox.appendChild(
+          checkbox
+        );
 
-<div class="user-id">
 
-${escapeClient(
-  user.username
-)}
+        if (user.avatar) {
 
-</div>
+          const avatar =
+            document.createElement(
+              'img'
+            );
 
-</div>
 
-</div>
+          avatar.src =
+            'https://cdn.discordapp.com/avatars/' +
+            encodeURIComponent(
+              user.discord_user_id
+            ) +
+            '/' +
+            encodeURIComponent(
+              user.avatar
+            ) +
+            '.png?size=128';
 
-          `
-        )
-        .join('');
+
+          avatar.alt =
+            '';
+
+
+          userBox.appendChild(
+            avatar
+          );
+
+        } else {
+
+          const avatar =
+            document.createElement(
+              'div'
+            );
+
+
+          avatar.style.width =
+            '40px';
+
+          avatar.style.height =
+            '40px';
+
+          avatar.style.borderRadius =
+            '50%';
+
+          avatar.style.background =
+            '#5865f2';
+
+          avatar.style.display =
+            'flex';
+
+          avatar.style.alignItems =
+            'center';
+
+          avatar.style.justifyContent =
+            'center';
+
+          avatar.textContent =
+            '👤';
+
+
+          userBox.appendChild(
+            avatar
+          );
+
+        }
+
+
+        const info =
+          document.createElement(
+            'div'
+          );
+
+        info.className =
+          'user-info';
+
+
+        const name =
+          document.createElement(
+            'div'
+          );
+
+        name.className =
+          'user-name';
+
+        name.textContent =
+          user.global_name ||
+          user.username ||
+          '알 수 없는 사용자';
+
+
+        const id =
+          document.createElement(
+            'div'
+          );
+
+        id.className =
+          'user-id';
+
+        id.textContent =
+          user.username ||
+          user.discord_user_id;
+
+
+        info.appendChild(
+          name
+        );
+
+        info.appendChild(
+          id
+        );
+
+
+        userBox.appendChild(
+          info
+        );
+
+
+        list.appendChild(
+          userBox
+        );
+
+      }
+    );
 
 
   } catch (error) {
 
     list.innerHTML =
-      '<div class="empty">' +
-      escapeClient(
-        error.message
-      ) +
-      '</div>';
+      '';
+
+
+    const errorBox =
+      document.createElement(
+        'div'
+      );
+
+    errorBox.className =
+      'empty';
+
+    errorBox.textContent =
+      error.message ||
+      '사용자 목록을 가져오지 못했습니다.';
+
+
+    list.appendChild(
+      errorBox
+    );
 
   }
 
@@ -2459,6 +2930,7 @@ function closeInvite() {
     'inviteModal'
   ).style.display =
     'none';
+
 
   inviteGuildId =
     null;
@@ -2630,45 +3102,13 @@ async function inviteSelected() {
     resultBox.textContent =
       `✅ 완료: ${success}명 / 실패: ${failed}명`;
 
+
   } catch (error) {
 
     resultBox.textContent =
       '❌ 요청 중 오류가 발생했습니다.';
 
   }
-
-}
-
-
-// ========================================
-// 브라우저용 HTML escape
-// ========================================
-
-function escapeClient(
-  text
-) {
-
-  return String(text || '')
-    .replace(
-      /&/g,
-      '&amp;'
-    )
-    .replace(
-      /</g,
-      '&lt;'
-    )
-    .replace(
-      />/g,
-      '&gt;'
-    )
-    .replace(
-      /"/g,
-      '&quot;'
-    )
-    .replace(
-      /'/g,
-      '&#039;'
-    );
 
 }
 
@@ -2819,6 +3259,12 @@ location.href =
     }
 
 
+    const oauth =
+      createDiscordOAuthURL(
+        guildId
+      );
+
+
     const embed =
       new EmbedBuilder()
 
@@ -2841,28 +3287,11 @@ location.href =
         )
 
         .setFooter({
+
           text:
             '인증봇'
+
         });
-
-
-    /*
-     * 중요:
-     *
-     * 기존 customId 버튼 대신
-     * URL 버튼을 사용한다.
-     *
-     * 사용자가 버튼을 누르면
-     * Discord OAuth2 승인 페이지로 이동한다.
-     *
-     * guildId는 OAuth state에 저장한다.
-     */
-
-
-    const oauth =
-      createDiscordOAuthURL(
-        guildId
-      );
 
 
     const button =
@@ -2907,25 +3336,6 @@ location.href =
       });
 
 
-      /*
-       * OAuth state를 DB에 저장하지 않고
-       * URL에 암호학적으로 충분히 랜덤한
-       * state를 넣는다.
-       *
-       * callback에서는 state 안의 guildId를
-       * 직접 복원하지 않고 별도 signed state를
-       * 사용해야 한다.
-       *
-       * 따라서 아래에서는 OAuth state를
-       * DB에 저장한다.
-       */
-
-      await saveOAuthState(
-        oauth.state,
-        guildId
-      );
-
-
       res.send(`
 
 <script>
@@ -2940,6 +3350,7 @@ location.href =
 </script>
 
       `);
+
 
     } catch (error) {
 
@@ -2970,40 +3381,7 @@ location.href =
 
 
 // ========================================
-// OAuth state 저장용
-// ========================================
-
-const oauthStates =
-  new Map();
-
-
-async function saveOAuthState(
-  state,
-  guildId
-) {
-
-  oauthStates.set(
-    state,
-    {
-
-      guildId,
-
-      createdAt:
-        Date.now()
-
-    }
-  );
-
-}
-
-
-// ========================================
 // OAuth 인증 시작
-// ========================================
-//
-// 관리자 페이지 외에도
-// 필요하면 직접 /auth/discord?guildId=...
-// 로 사용할 수 있다.
 // ========================================
 
 app.get(
@@ -3019,7 +3397,8 @@ app.get(
 
     if (!guildId) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .send(
           'guildId가 필요합니다.'
         );
@@ -3033,7 +3412,8 @@ app.get(
       )
     ) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .send(
           '봇이 해당 서버에 들어가 있지 않습니다.'
         );
@@ -3045,12 +3425,6 @@ app.get(
       createDiscordOAuthURL(
         guildId
       );
-
-
-    await saveOAuthState(
-      oauth.state,
-      guildId
-    );
 
 
     res.redirect(
@@ -3157,7 +3531,8 @@ Discord 인증이 취소되었습니다.
       !state
     ) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .send(
           'OAuth 인증 정보가 없습니다.'
         );
@@ -3165,40 +3540,22 @@ Discord 인증이 취소되었습니다.
     }
 
 
+    // ==================================
+    // state 검증
+    // ==================================
+
     const stateData =
-      oauthStates.get(
-        state
+      verifyOAuthState(
+        String(state)
       );
 
 
     if (!stateData) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .send(
           'OAuth 인증 시간이 만료되었거나 잘못된 요청입니다.'
-        );
-
-    }
-
-
-    oauthStates.delete(
-      state
-    );
-
-
-    /*
-     * OAuth state는 10분 이상 지난 경우 거부
-     */
-
-    if (
-      Date.now() -
-      stateData.createdAt >
-      10 * 60 * 1000
-    ) {
-
-      return res.status(400)
-        .send(
-          '인증 요청이 만료되었습니다. 다시 인증해 주세요.'
         );
 
     }
@@ -3302,11 +3659,6 @@ Discord 인증이 취소되었습니다.
 
         );
 
-
-      /*
-       * 201 = 새 멤버 추가
-       * 204 = 이미 멤버인 경우 등 성공
-       */
 
       if (!result.ok) {
 
@@ -3569,6 +3921,7 @@ ${escapeHtml(
 
       `);
 
+
     } catch (error) {
 
       console.error(
@@ -3577,7 +3930,8 @@ ${escapeHtml(
       );
 
 
-      res.status(500)
+      res
+        .status(500)
         .send(`
 
 <!DOCTYPE html>
@@ -3592,9 +3946,47 @@ ${escapeHtml(
 인증 오류
 </title>
 
+<style>
+
+body {
+
+  margin: 0;
+
+  min-height: 100vh;
+
+  background: #0f1117;
+
+  color: white;
+
+  font-family: Arial;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+}
+
+.box {
+
+  background: #181b23;
+
+  padding: 35px;
+
+  border-radius: 18px;
+
+  text-align: center;
+
+}
+
+</style>
+
 </head>
 
 <body>
+
+<div class="box">
 
 <h1>
 ❌ 인증 처리 중 오류가 발생했습니다.
@@ -3603,6 +3995,8 @@ ${escapeHtml(
 <p>
 잠시 후 다시 시도해 주세요.
 </p>
+
+</div>
 
 </body>
 
@@ -3633,11 +4027,13 @@ app.get(
 
       res.json({
 
-        ok: true,
+        ok:
+          true,
 
         users
 
       });
+
 
     } catch (error) {
 
@@ -3646,10 +4042,12 @@ app.get(
       );
 
 
-      res.status(500)
+      res
+        .status(500)
         .json({
 
-          ok: false,
+          ok:
+            false,
 
           error:
             '사용자 목록을 가져오지 못했습니다.'
@@ -3683,10 +4081,12 @@ app.post(
       'string'
     ) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .json({
 
-          ok: false,
+          ok:
+            false,
 
           error:
             'guildId가 필요합니다.'
@@ -3701,10 +4101,12 @@ app.post(
       userIds.length === 0
     ) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .json({
 
-          ok: false,
+          ok:
+            false,
 
           error:
             '사용자를 한 명 이상 선택해 주세요.'
@@ -3715,13 +4117,16 @@ app.post(
 
 
     if (
-      userIds.length > 100
+      userIds.length >
+      100
     ) {
 
-      return res.status(400)
+      return res
+        .status(400)
         .json({
 
-          ok: false,
+          ok:
+            false,
 
           error:
             '한 번에 최대 100명까지 처리할 수 있습니다.'
@@ -3743,10 +4148,12 @@ app.post(
 
     if (!guild) {
 
-      return res.status(404)
+      return res
+        .status(404)
         .json({
 
-          ok: false,
+          ok:
+            false,
 
           error:
             '봇이 해당 서버에 들어가 있지 않습니다.'
@@ -3798,7 +4205,8 @@ app.post(
 
             userId,
 
-            ok: false,
+            ok:
+              false,
 
             error:
               'OAuth 권한이 없거나 토큰이 만료되었습니다.'
@@ -3830,7 +4238,8 @@ app.post(
 
             userId,
 
-            ok: false,
+            ok:
+              false,
 
             status:
               result.status,
@@ -3893,7 +4302,8 @@ app.post(
 
           userId,
 
-          ok: true
+          ok:
+            true
 
         });
 
@@ -3910,7 +4320,8 @@ app.post(
 
           userId,
 
-          ok: false,
+          ok:
+            false,
 
           error:
             '처리 중 오류가 발생했습니다.'
@@ -3924,7 +4335,8 @@ app.post(
 
     res.json({
 
-      ok: true,
+      ok:
+        true,
 
       results
 
@@ -3959,7 +4371,8 @@ app.post(
 
       return res.json({
 
-        ok: false,
+        ok:
+          false,
 
         error:
           '메시지를 입력해 주세요.'
@@ -3976,7 +4389,8 @@ app.post(
 
       return res.json({
 
-        ok: false,
+        ok:
+          false,
 
         error:
           'Discord 메시지는 2000자를 초과할 수 없습니다.'
@@ -3996,7 +4410,8 @@ app.post(
 
       return res.json({
 
-        ok: false,
+        ok:
+          false,
 
         error:
           '서버를 찾을 수 없습니다.'
@@ -4019,7 +4434,8 @@ app.post(
 
       return res.json({
 
-        ok: false,
+        ok:
+          false,
 
         error:
           '채널을 찾을 수 없습니다.'
@@ -4041,9 +4457,11 @@ app.post(
 
       return res.json({
 
-        ok: true
+        ok:
+          true
 
       });
+
 
     } catch (error) {
 
@@ -4055,7 +4473,8 @@ app.post(
 
       return res.json({
 
-        ok: false,
+        ok:
+          false,
 
         error:
           'Discord에 메시지를 전송하지 못했습니다.'
@@ -4107,45 +4526,7 @@ function escapeHtml(
 
 
 // ========================================
-// OAuth State 자동 정리
-// ========================================
-
-setInterval(
-  () => {
-
-    const now =
-      Date.now();
-
-
-    for (
-      const [
-        state,
-        data
-      ]
-      of oauthStates
-    ) {
-
-      if (
-        now -
-        data.createdAt >
-        10 * 60 * 1000
-      ) {
-
-        oauthStates.delete(
-          state
-        );
-
-      }
-
-    }
-
-  },
-  60 * 1000
-);
-
-
-// ========================================
-// 웹 서버 시작
+// 서버 시작
 // ========================================
 
 async function start() {
