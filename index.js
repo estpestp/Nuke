@@ -55,7 +55,6 @@ if (!TOKEN) {
   console.error(
     '❌ DISCORD_TOKEN 환경변수가 없습니다.'
   );
-
   process.exit(1);
 }
 
@@ -63,7 +62,6 @@ if (!CLIENT_ID) {
   console.error(
     '❌ DISCORD_CLIENT_ID 환경변수가 없습니다.'
   );
-
   process.exit(1);
 }
 
@@ -71,7 +69,6 @@ if (!CLIENT_SECRET) {
   console.error(
     '❌ DISCORD_CLIENT_SECRET 환경변수가 없습니다.'
   );
-
   process.exit(1);
 }
 
@@ -79,7 +76,6 @@ if (!DATABASE_URL) {
   console.error(
     '❌ DATABASE_URL 환경변수가 없습니다.'
   );
-
   process.exit(1);
 }
 
@@ -102,53 +98,29 @@ const pool = new Pool({
 // ========================================
 
 async function initDatabase() {
-
   await pool.query(`
-
     CREATE TABLE IF NOT EXISTS app_users (
-
-      discord_user_id VARCHAR(32)
-      PRIMARY KEY,
-
+      discord_user_id VARCHAR(32) PRIMARY KEY,
       username TEXT,
-
       global_name TEXT,
-
       avatar TEXT,
-
       access_token TEXT,
-
       refresh_token TEXT,
-
       expires_at BIGINT,
-
       scope TEXT,
-
-      installed_at TIMESTAMPTZ
-      DEFAULT NOW(),
-
-      updated_at TIMESTAMPTZ
-      DEFAULT NOW()
-
+      installed_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     );
-
   `);
 
-
-  // 기존 DB에 refresh_token 컬럼이 없을 경우 추가
   await pool.query(`
-
     ALTER TABLE app_users
-
     ADD COLUMN IF NOT EXISTS refresh_token TEXT;
-
   `);
-
 
   console.log(
     '✅ PostgreSQL 데이터베이스 준비 완료'
   );
-
 }
 
 
@@ -173,36 +145,16 @@ app.use(
 
 app.use(
   session({
-
-    secret:
-      SESSION_SECRET,
-
-    resave:
-      false,
-
-    saveUninitialized:
-      false,
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
 
     cookie: {
-
-      httpOnly:
-        true,
-
-      secure:
-        process.env.NODE_ENV ===
-        'production',
-
-      sameSite:
-        'lax',
-
-      maxAge:
-        1000 *
-        60 *
-        60 *
-        6
-
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 6
     }
-
   })
 );
 
@@ -216,30 +168,16 @@ const guildSettings =
 
 
 // ========================================
-// OAuth State
-// ========================================
-
-const oauthStates =
-  new Map();
-
-
-// ========================================
 // Discord 봇
 // ========================================
 
 const client =
   new Client({
-
     intents: [
-
       GatewayIntentBits.Guilds,
-
       GatewayIntentBits.GuildMessages,
-
       GatewayIntentBits.MessageContent
-
     ]
-
   });
 
 
@@ -248,11 +186,8 @@ const client =
 // ========================================
 
 function getBotStatus() {
-
   return {
-
-    online:
-      client.isReady(),
+    online: client.isReady(),
 
     username:
       client.user?.tag ||
@@ -260,19 +195,14 @@ function getBotStatus() {
 
     guildCount:
       client.guilds.cache.size
-
   };
-
 }
 
-
 function broadcastBotStatus() {
-
   io.emit(
     'botStatus',
     getBotStatus()
   );
-
 }
 
 
@@ -283,7 +213,6 @@ function broadcastBotStatus() {
 client.once(
   'ready',
   () => {
-
     console.log(
       `✅ Discord 로그인 완료: ${client.user.tag}`
     );
@@ -293,7 +222,6 @@ client.once(
     );
 
     broadcastBotStatus();
-
   }
 );
 
@@ -305,21 +233,17 @@ client.once(
 client.on(
   'shardReady',
   () => {
-
     console.log(
       '🟢 Discord 연결 준비 완료'
     );
 
     broadcastBotStatus();
-
   }
 );
-
 
 client.on(
   'shardDisconnect',
   () => {
-
     console.log(
       '🔴 Discord 연결 종료'
     );
@@ -327,33 +251,22 @@ client.on(
     io.emit(
       'botStatus',
       {
-
-        online:
-          false,
-
-        username:
-          null,
-
-        guildCount:
-          0
-
+        online: false,
+        username: null,
+        guildCount: 0
       }
     );
-
   }
 );
-
 
 client.on(
   'shardResume',
   () => {
-
     console.log(
       '🟢 Discord 연결 재개'
     );
 
     broadcastBotStatus();
-
   }
 );
 
@@ -365,7 +278,6 @@ client.on(
 client.on(
   'messageCreate',
   message => {
-
     if (!message.guild) {
       return;
     }
@@ -377,37 +289,17 @@ client.on(
     io.emit(
       'discordMessage',
       {
-
-        guildId:
-          message.guild.id,
-
-        guildName:
-          message.guild.name,
-
-        channelId:
-          message.channel.id,
-
-        channelName:
-          message.channel.name,
-
-        author:
-          message.author.username,
-
-        authorAvatar:
-          message.author.displayAvatarURL(),
-
-        content:
-          message.content,
-
-        bot:
-          message.author.bot,
-
-        timestamp:
-          Date.now()
-
+        guildId: message.guild.id,
+        guildName: message.guild.name,
+        channelId: message.channel.id,
+        channelName: message.channel.name,
+        author: message.author.username,
+        authorAvatar: message.author.displayAvatarURL(),
+        content: message.content,
+        bot: message.author.bot,
+        timestamp: Date.now()
       }
     );
-
   }
 );
 
@@ -421,33 +313,21 @@ function requireLogin(
   res,
   next
 ) {
-
   if (!req.session.loggedIn) {
-
-    return res.redirect(
-      '/login'
-    );
-
+    return res.redirect('/login');
   }
 
   next();
-
 }
 
 
 // ========================================
 // OAuth State 생성
 // ========================================
-//
-// 인증 패널의 버튼 하나를 여러 사람이 눌러도
-// 동일한 state 때문에 충돌하지 않도록
-// state 안에 guildId를 서명해서 넣는다.
-// ========================================
 
 function createOAuthState(
   guildId
 ) {
-
   const timestamp =
     Date.now();
 
@@ -473,7 +353,6 @@ function createOAuthState(
       `${payload}.${signature}`
     )
     .toString('base64url');
-
 }
 
 
@@ -484,9 +363,7 @@ function createOAuthState(
 function verifyOAuthState(
   state
 ) {
-
   try {
-
     const decoded =
       Buffer
         .from(
@@ -567,7 +444,6 @@ function verifyOAuthState(
       return null;
     }
 
-    // 10분
     if (
       Date.now() -
       timestamp >
@@ -577,21 +453,14 @@ function verifyOAuthState(
     }
 
     return {
-
       guildId,
-
       timestamp,
-
       nonce
-
     };
 
   } catch {
-
     return null;
-
   }
-
 }
 
 
@@ -602,7 +471,6 @@ function verifyOAuthState(
 function createDiscordOAuthURL(
   guildId
 ) {
-
   const state =
     createOAuthState(
       guildId
@@ -610,36 +478,20 @@ function createDiscordOAuthURL(
 
   const params =
     new URLSearchParams({
-
-      client_id:
-        CLIENT_ID,
-
-      response_type:
-        'code',
-
-      redirect_uri:
-        REDIRECT_URI,
-
-      scope:
-        'identify guilds.join',
-
+      client_id: CLIENT_ID,
+      response_type: 'code',
+      redirect_uri: REDIRECT_URI,
+      scope: 'identify guilds.join',
       state,
-
-      prompt:
-        'consent'
-
+      prompt: 'consent'
     });
 
-
   return {
-
     state,
 
     url:
       `https://discord.com/oauth2/authorize?${params.toString()}`
-
   };
-
 }
 
 
@@ -651,26 +503,20 @@ async function discordFetch(
   endpoint,
   options = {}
 ) {
-
   const response =
     await fetch(
       DISCORD_API + endpoint,
       {
-
         ...options,
 
         headers: {
-
           'Content-Type':
             'application/json',
 
           ...(options.headers || {})
-
         }
-
       }
     );
-
 
   const text =
     await response.text();
@@ -678,28 +524,19 @@ async function discordFetch(
   let data;
 
   try {
-
     data =
       text
         ? JSON.parse(text)
         : null;
-
   } catch {
-
     data =
       text;
-
   }
 
-
   return {
-
     response,
-
     data
-
   };
-
 }
 
 
@@ -710,65 +547,42 @@ async function discordFetch(
 async function exchangeCode(
   code
 ) {
-
   const body =
     new URLSearchParams({
-
-      client_id:
-        CLIENT_ID,
-
-      client_secret:
-        CLIENT_SECRET,
-
-      grant_type:
-        'authorization_code',
-
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'authorization_code',
       code,
-
-      redirect_uri:
-        REDIRECT_URI
-
+      redirect_uri: REDIRECT_URI
     });
-
 
   const response =
     await fetch(
       `${DISCORD_API}/oauth2/token`,
       {
-
-        method:
-          'POST',
+        method: 'POST',
 
         headers: {
-
           'Content-Type':
             'application/x-www-form-urlencoded'
-
         },
 
         body
-
       }
     );
-
 
   const data =
     await response.json();
 
-
   if (!response.ok) {
-
     throw new Error(
       data?.error_description ||
       data?.message ||
       'OAuth 토큰 교환 실패'
     );
-
   }
 
-
   return data;
-
 }
 
 
@@ -779,7 +593,6 @@ async function exchangeCode(
 async function getDiscordUser(
   accessToken
 ) {
-
   const {
     response,
     data
@@ -787,30 +600,21 @@ async function getDiscordUser(
     await discordFetch(
       '/users/@me',
       {
-
         headers: {
-
           Authorization:
             `Bearer ${accessToken}`
-
         }
-
       }
     );
 
-
   if (!response.ok) {
-
     throw new Error(
       data?.message ||
       'Discord 사용자 정보를 가져오지 못했습니다.'
     );
-
   }
 
-
   return data;
-
 }
 
 
@@ -822,7 +626,6 @@ async function saveAppUser(
   user,
   tokenData
 ) {
-
   const expiresAt =
     Date.now() +
     (
@@ -833,35 +636,20 @@ async function saveAppUser(
       1000
     );
 
-
   await pool.query(
-
     `
-
     INSERT INTO app_users (
-
       discord_user_id,
-
       username,
-
       global_name,
-
       avatar,
-
       access_token,
-
       refresh_token,
-
       expires_at,
-
       scope,
-
       updated_at
-
     )
-
     VALUES (
-
       $1,
       $2,
       $3,
@@ -871,67 +659,29 @@ async function saveAppUser(
       $7,
       $8,
       NOW()
-
     )
-
-    ON CONFLICT (
-      discord_user_id
-    )
-
+    ON CONFLICT (discord_user_id)
     DO UPDATE SET
-
-      username =
-        EXCLUDED.username,
-
-      global_name =
-        EXCLUDED.global_name,
-
-      avatar =
-        EXCLUDED.avatar,
-
-      access_token =
-        EXCLUDED.access_token,
-
-      refresh_token =
-        EXCLUDED.refresh_token,
-
-      expires_at =
-        EXCLUDED.expires_at,
-
-      scope =
-        EXCLUDED.scope,
-
-      updated_at =
-        NOW()
-
+      username = EXCLUDED.username,
+      global_name = EXCLUDED.global_name,
+      avatar = EXCLUDED.avatar,
+      access_token = EXCLUDED.access_token,
+      refresh_token = EXCLUDED.refresh_token,
+      expires_at = EXCLUDED.expires_at,
+      scope = EXCLUDED.scope,
+      updated_at = NOW()
     `,
-
     [
-
       user.id,
-
       user.username,
-
-      user.global_name ||
-        null,
-
-      user.avatar ||
-        null,
-
+      user.global_name || null,
+      user.avatar || null,
       tokenData.access_token,
-
-      tokenData.refresh_token ||
-        null,
-
+      tokenData.refresh_token || null,
       expiresAt,
-
-      tokenData.scope ||
-        ''
-
+      tokenData.scope || ''
     ]
-
   );
-
 }
 
 
@@ -940,41 +690,24 @@ async function saveAppUser(
 // ========================================
 
 async function getAppUsers() {
-
   const result =
     await pool.query(
-
       `
-
       SELECT
-
         discord_user_id,
-
         username,
-
         global_name,
-
         avatar,
-
         expires_at,
-
         scope,
-
         installed_at,
-
         updated_at
-
       FROM app_users
-
       ORDER BY updated_at DESC
-
       `
-
     );
 
-
   return result.rows;
-
 }
 
 
@@ -986,66 +719,44 @@ async function refreshUserToken(
   userId,
   refreshToken
 ) {
-
   if (!refreshToken) {
     return null;
   }
 
-
   const body =
     new URLSearchParams({
-
-      client_id:
-        CLIENT_ID,
-
-      client_secret:
-        CLIENT_SECRET,
-
-      grant_type:
-        'refresh_token',
-
-      refresh_token:
-        refreshToken
-
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
     });
-
 
   const response =
     await fetch(
       `${DISCORD_API}/oauth2/token`,
       {
-
-        method:
-          'POST',
+        method: 'POST',
 
         headers: {
-
           'Content-Type':
             'application/x-www-form-urlencoded'
-
         },
 
         body
-
       }
     );
-
 
   const data =
     await response.json();
 
-
   if (!response.ok) {
-
     console.error(
       'OAuth 토큰 갱신 실패:',
       data
     );
 
     return null;
-
   }
-
 
   const expiresAt =
     Date.now() +
@@ -1057,50 +768,27 @@ async function refreshUserToken(
       1000
     );
 
-
   await pool.query(
-
     `
-
     UPDATE app_users
-
     SET
-
       access_token = $1,
-
       refresh_token = $2,
-
       expires_at = $3,
-
       scope = $4,
-
       updated_at = NOW()
-
     WHERE discord_user_id = $5
-
     `,
-
     [
-
       data.access_token,
-
-      data.refresh_token ||
-        refreshToken,
-
+      data.refresh_token || refreshToken,
       expiresAt,
-
-      data.scope ||
-        '',
-
+      data.scope || '',
       userId
-
     ]
-
   );
 
-
   return data.access_token;
-
 }
 
 
@@ -1111,45 +799,28 @@ async function refreshUserToken(
 async function getUserToken(
   userId
 ) {
-
   const result =
     await pool.query(
-
       `
-
       SELECT
-
         access_token,
-
         refresh_token,
-
         expires_at,
-
         scope
-
       FROM app_users
-
       WHERE discord_user_id = $1
-
       `,
-
       [userId]
-
     );
-
 
   if (
     result.rows.length === 0
   ) {
-
     return null;
-
   }
-
 
   const row =
     result.rows[0];
-
 
   if (
     row.access_token &&
@@ -1157,26 +828,17 @@ async function getUserToken(
     Number(row.expires_at) >
       Date.now() + 60 * 1000
   ) {
-
     return row.access_token;
-
   }
 
-
-  if (
-    row.refresh_token
-  ) {
-
+  if (row.refresh_token) {
     return await refreshUserToken(
       userId,
       row.refresh_token
     );
-
   }
 
-
   return null;
-
 }
 
 
@@ -1190,64 +852,41 @@ async function addUserToGuild(
   accessToken,
   roleId
 ) {
-
   const body = {
-
     access_token:
       accessToken
-
   };
 
-
   if (roleId) {
-
     body.roles = [
       roleId
     ];
-
   }
-
 
   const {
     response,
     data
   } =
     await discordFetch(
-
       `/guilds/${guildId}/members/${userId}`,
-
       {
-
-        method:
-          'PUT',
+        method: 'PUT',
 
         headers: {
-
           Authorization:
             `Bot ${TOKEN}`
-
         },
 
         body:
           JSON.stringify(body)
-
       }
-
     );
 
-
   return {
-
-    ok:
-      response.ok,
-
-    status:
-      response.status,
-
+    ok: response.ok,
+    status: response.status,
     data
-
   };
-
 }
 
 
@@ -1258,66 +897,36 @@ async function addUserToGuild(
 app.get(
   '/login',
   (req, res) => {
-
     res.send(`
-
 <!DOCTYPE html>
-
 <html lang="ko">
-
 <head>
-
 <meta charset="UTF-8">
-
-<meta
-name="viewport"
-content="width=device-width,initial-scale=1"
->
-
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>인증봇 로그인</title>
 
 <style>
-
 * {
   box-sizing: border-box;
 }
 
 body {
-
   margin: 0;
-
   min-height: 100vh;
-
   background: #0f1117;
-
   color: white;
-
-  font-family:
-    Arial,
-    sans-serif;
-
+  font-family: Arial, sans-serif;
   display: flex;
-
   align-items: center;
-
   justify-content: center;
-
 }
 
 .login {
-
   width: 350px;
-
   background: #181b23;
-
   padding: 30px;
-
   border-radius: 18px;
-
-  box-shadow:
-    0 15px 50px
-    rgba(0,0,0,.4);
-
+  box-shadow: 0 15px 50px rgba(0,0,0,.4);
 }
 
 h1 {
@@ -1325,45 +934,26 @@ h1 {
 }
 
 input {
-
   width: 100%;
-
   padding: 14px;
-
   margin: 15px 0;
-
   background: #0f1117;
-
   color: white;
-
   border: 1px solid #343846;
-
   border-radius: 9px;
-
 }
 
 button {
-
   width: 100%;
-
   padding: 14px;
-
   background: #5865f2;
-
   color: white;
-
   border: 0;
-
   border-radius: 9px;
-
   cursor: pointer;
-
   font-weight: bold;
-
 }
-
 </style>
-
 </head>
 
 <body>
@@ -1376,21 +966,16 @@ button {
 관리자 패널에 로그인하세요.
 </p>
 
-<form
-method="POST"
-action="/login"
->
+<form method="POST" action="/login">
 
 <input
-type="password"
-name="password"
-placeholder="비밀번호"
-required
+  type="password"
+  name="password"
+  placeholder="비밀번호"
+  required
 >
 
-<button
-type="submit"
->
+<button type="submit">
 로그인
 </button>
 
@@ -1399,11 +984,8 @@ type="submit"
 </div>
 
 </body>
-
 </html>
-
     `);
-
   }
 );
 
@@ -1415,36 +997,22 @@ type="submit"
 app.post(
   '/login',
   (req, res) => {
-
     if (
       req.body.password !==
       ADMIN_PASSWORD
     ) {
-
       return res.send(`
-
 <script>
-
-alert(
-'비밀번호가 올바르지 않습니다.'
-);
-
-location.href =
-'/login';
-
+alert('비밀번호가 올바르지 않습니다.');
+location.href = '/login';
 </script>
-
       `);
-
     }
-
 
     req.session.loggedIn =
       true;
 
-
     res.redirect('/');
-
   }
 );
 
@@ -1456,17 +1024,11 @@ location.href =
 app.get(
   '/logout',
   (req, res) => {
-
     req.session.destroy(
       () => {
-
-        res.redirect(
-          '/login'
-        );
-
+        res.redirect('/login');
       }
     );
-
   }
 );
 
@@ -1489,89 +1051,70 @@ app.get(
               guild.id
             ) || {};
 
-
           const roles =
             guild.roles.cache
-
               .filter(
                 role =>
                   role.id !== guild.id
               )
-
               .map(
                 role => `
-
 <option
-value="${role.id}"
-${
-  settings.roleId === role.id
-    ? 'selected'
-    : ''
-}
+  value="${role.id}"
+  ${
+    settings.roleId === role.id
+      ? 'selected'
+      : ''
+  }
 >
 ${escapeHtml(role.name)}
 </option>
-
                 `
               )
-
               .join('');
-
 
           const channels =
             guild.channels.cache
-
               .filter(
                 channel =>
                   channel.isTextBased()
               )
-
               .map(
                 channel => `
-
 <option
-value="${channel.id}"
-${
-  settings.channelId === channel.id
-    ? 'selected'
-    : ''
-}
+  value="${channel.id}"
+  ${
+    settings.channelId === channel.id
+      ? 'selected'
+      : ''
+  }
 >
 # ${escapeHtml(channel.name)}
 </option>
-
                 `
               )
-
               .join('');
 
-
           return `
-
 <div class="server">
 
 <h2>
 🏠 ${escapeHtml(guild.name)}
 </h2>
 
-<form
-method="POST"
-action="/save"
->
+<form method="POST" action="/save">
 
 <input
-type="hidden"
-name="guildId"
-value="${guild.id}"
+  type="hidden"
+  name="guildId"
+  value="${guild.id}"
 >
 
 <label>
 인증 역할
 </label>
 
-<select
-name="roleId"
->
+<select name="roleId">
 
 <option value="">
 역할 선택
@@ -1585,9 +1128,7 @@ ${roles}
 인증 채널
 </label>
 
-<select
-name="channelId"
->
+<select name="channelId">
 
 <option value="">
 채널 선택
@@ -1597,46 +1138,37 @@ ${channels}
 
 </select>
 
-<button
-type="submit"
->
+<button type="submit">
 설정 저장
 </button>
 
 </form>
 
-
-<form
-method="POST"
-action="/send-panel"
->
+<form method="POST" action="/send-panel">
 
 <input
-type="hidden"
-name="guildId"
-value="${guild.id}"
+  type="hidden"
+  name="guildId"
+  value="${guild.id}"
 >
 
 <button
-class="green"
-type="submit"
+  class="green"
+  type="submit"
 >
 🔐 인증 패널 전송
 </button>
 
 </form>
 
-
 <button
-class="purple"
-onclick="openInvite('${guild.id}')"
+  class="purple"
+  onclick="openInvite('${guild.id}')"
 >
 👥 해당 서버에 사람들을 초대하기
 </button>
 
-
 <hr>
-
 
 <h3>
 💬 채팅
@@ -1647,8 +1179,8 @@ onclick="openInvite('${guild.id}')"
 </label>
 
 <select
-id="chatChannel-${guild.id}"
-onchange="selectChannel('${guild.id}')"
+  id="chatChannel-${guild.id}"
+  onchange="selectChannel('${guild.id}')"
 >
 
 <option value="">
@@ -1659,10 +1191,9 @@ ${channels}
 
 </select>
 
-
 <div
-class="chat"
-id="chat-${guild.id}"
+  class="chat"
+  id="chat-${guild.id}"
 >
 
 <div class="empty">
@@ -1671,17 +1202,16 @@ id="chat-${guild.id}"
 
 </div>
 
-
 <div class="send">
 
 <input
-id="message-${guild.id}"
-placeholder="메시지를 입력하세요..."
-onkeydown="handleEnter(event,'${guild.id}')"
+  id="message-${guild.id}"
+  placeholder="메시지를 입력하세요..."
+  onkeydown="handleEnter(event,'${guild.id}')"
 >
 
 <button
-onclick="sendMessage('${guild.id}')"
+  onclick="sendMessage('${guild.id}')"
 >
 전송
 </button>
@@ -1689,20 +1219,14 @@ onclick="sendMessage('${guild.id}')"
 </div>
 
 </div>
-
           `;
-
         }
-
       ).join('');
-
 
     const status =
       getBotStatus();
 
-
     res.send(`
-
 <!DOCTYPE html>
 
 <html lang="ko">
@@ -1712,17 +1236,15 @@ onclick="sendMessage('${guild.id}')"
 <meta charset="UTF-8">
 
 <meta
-name="viewport"
-content="width=device-width,initial-scale=1"
+  name="viewport"
+  content="width=device-width,initial-scale=1"
 >
 
 <title>
 인증봇 관리자
 </title>
 
-<script
-src="/socket.io/socket.io.js"
-></script>
+<script src="/socket.io/socket.io.js"></script>
 
 <style>
 
@@ -1731,204 +1253,121 @@ src="/socket.io/socket.io.js"
 }
 
 body {
-
   margin: 0;
-
   background: #0f1117;
-
   color: white;
-
-  font-family:
-    Arial,
-    sans-serif;
-
+  font-family: Arial, sans-serif;
 }
 
 header {
-
   background: #181b23;
-
   padding: 18px 25px;
-
   display: flex;
-
   justify-content: space-between;
-
   align-items: center;
-
 }
 
 header a {
-
   color: #aaa;
-
   text-decoration: none;
-
 }
 
 .container {
-
   max-width: 1000px;
-
   margin: auto;
-
   padding: 25px;
-
 }
 
 .status {
-
   background: #181b23;
-
   padding: 20px;
-
   border-radius: 14px;
-
   margin-bottom: 20px;
-
 }
 
 .server {
-
   background: #181b23;
-
   padding: 22px;
-
   border-radius: 14px;
-
   margin-bottom: 25px;
-
 }
 
 label {
-
   display: block;
-
   margin-top: 14px;
-
   margin-bottom: 6px;
-
 }
 
 select,
 .send input {
-
   width: 100%;
-
   padding: 12px;
-
   background: #0f1117;
-
   color: white;
-
   border: 1px solid #343846;
-
   border-radius: 8px;
-
 }
 
 button {
-
   padding: 12px;
-
   margin-top: 12px;
-
   border: 0;
-
   border-radius: 8px;
-
   background: #5865f2;
-
   color: white;
-
   font-weight: bold;
-
   cursor: pointer;
-
 }
 
 .green {
-
   background: #23a55a;
-
   width: 100%;
-
 }
 
 .purple {
-
   background: #8b5cf6;
-
   width: 100%;
-
 }
 
 .chat {
-
   height: 350px;
-
   overflow-y: auto;
-
   background: #0d0f14;
-
   border-radius: 10px;
-
   padding: 12px;
-
   margin-top: 10px;
-
 }
 
 .message {
-
   margin-bottom: 12px;
-
 }
 
 .author {
-
   font-weight: bold;
-
   color: #8ea1ff;
-
 }
 
 .time {
-
   font-size: 11px;
-
   color: #777;
-
   margin-left: 5px;
-
 }
 
 .content {
-
   margin-top: 3px;
-
   word-break: break-word;
-
 }
 
 .empty {
-
   color: #777;
-
   text-align: center;
-
   margin-top: 130px;
-
 }
 
 .send {
-
   display: flex;
-
   gap: 8px;
-
   margin-top: 8px;
-
 }
 
 .send input {
@@ -1936,201 +1375,116 @@ button {
 }
 
 .send button {
-
   width: 80px;
-
   margin-top: 0;
-
 }
 
 hr {
-
   border: 0;
-
-  border-top:
-    1px solid #30333d;
-
+  border-top: 1px solid #30333d;
   margin: 25px 0;
-
 }
 
-
-/* ===================================
-   초대 모달
-=================================== */
-
 .modal {
-
   display: none;
-
   position: fixed;
-
   inset: 0;
-
-  background:
-    rgba(0,0,0,.7);
-
+  background: rgba(0,0,0,.7);
   z-index: 9999;
-
   align-items: center;
-
   justify-content: center;
-
 }
 
 .modal-box {
-
-  width: min(
-    650px,
-    92vw
-  );
-
+  width: min(650px,92vw);
   max-height: 80vh;
-
   overflow-y: auto;
-
   background: #181b23;
-
   border-radius: 16px;
-
   padding: 24px;
-
-  box-shadow:
-    0 20px 70px
-    rgba(0,0,0,.6);
-
+  box-shadow: 0 20px 70px rgba(0,0,0,.6);
 }
 
 .modal-header {
-
   display: flex;
-
-  justify-content:
-    space-between;
-
+  justify-content: space-between;
   align-items: center;
-
 }
 
 .close {
-
   background: #30333d;
-
   width: 40px;
-
   height: 40px;
-
   padding: 0;
-
   margin: 0;
-
   font-size: 18px;
-
 }
 
 .user-list {
-
   margin-top: 15px;
-
 }
 
 .user {
-
   display: flex;
-
   align-items: center;
-
   gap: 12px;
-
   padding: 10px;
-
   background: #101219;
-
   border-radius: 10px;
-
   margin-bottom: 8px;
-
 }
 
 .user:hover {
-
   background: #20232d;
-
 }
 
 .user img {
-
   width: 40px;
-
   height: 40px;
-
   border-radius: 50%;
-
 }
 
 .user-info {
-
   flex: 1;
-
 }
 
 .user-name {
-
   font-weight: bold;
-
 }
 
 .user-id {
-
   color: #777;
-
   font-size: 11px;
-
 }
 
 .user input {
-
   width: 20px;
-
   height: 20px;
-
 }
 
 .invite-actions {
-
   display: flex;
-
   gap: 8px;
-
 }
 
 .invite-actions button {
-
   flex: 1;
-
 }
 
 .select-all {
-
   background: #30333d;
-
 }
 
 #inviteResult {
-
   margin-top: 12px;
-
   color: #aaa;
-
 }
 
 </style>
 
 </head>
 
-
 <body>
-
 
 <header>
 
@@ -2144,9 +1498,7 @@ hr {
 
 </header>
 
-
 <div class="container">
-
 
 <div class="status">
 
@@ -2185,28 +1537,21 @@ ${status.guildCount}
 
 </div>
 
-
 <h2>
 서버 관리
 </h2>
-
 
 ${
   guilds ||
   '<p>봇이 들어가 있는 서버가 없습니다.</p>'
 }
 
-
 </div>
 
 
-<!-- ===================================
-     초대 모달
-=================================== -->
-
 <div
-class="modal"
-id="inviteModal"
+  class="modal"
+  id="inviteModal"
 >
 
 <div class="modal-box">
@@ -2218,44 +1563,39 @@ id="inviteModal"
 </h2>
 
 <button
-class="close"
-onclick="closeInvite()"
+  class="close"
+  onclick="closeInvite()"
 >
 ×
 </button>
 
 </div>
 
-
 <p>
 앱 설치 및 서버 참가 권한을 승인한 사용자입니다.
 </p>
 
-
-<div
-class="invite-actions"
->
+<div class="invite-actions">
 
 <button
-class="select-all"
-onclick="selectAllUsers()"
+  class="select-all"
+  onclick="selectAllUsers()"
 >
 전체 선택
 </button>
 
 <button
-class="select-all"
-onclick="unselectAllUsers()"
+  class="select-all"
+  onclick="unselectAllUsers()"
 >
 전체 해제
 </button>
 
 </div>
 
-
 <div
-id="userList"
-class="user-list"
+  id="userList"
+  class="user-list"
 >
 
 <div class="empty">
@@ -2264,19 +1604,16 @@ class="user-list"
 
 </div>
 
-
 <div
-id="inviteResult"
+  id="inviteResult"
 ></div>
 
-
 <button
-onclick="inviteSelected()"
-style="width:100%;"
+  onclick="inviteSelected()"
+  style="width:100%;"
 >
 🚀 선택한 사용자 서버에 참가시키기
 </button>
-
 
 </div>
 
@@ -2288,10 +1625,8 @@ style="width:100%;"
 const socket =
   io();
 
-
 const selectedChannels =
   {};
-
 
 let inviteGuildId =
   null;
@@ -2320,11 +1655,9 @@ socket.on(
         'guildCount'
       );
 
-
     if (!status) {
       return;
     }
-
 
     if (data.online) {
 
@@ -2373,17 +1706,14 @@ function selectChannel(
       guildId
     );
 
-
   selectedChannels[guildId] =
     select.value;
-
 
   const chat =
     document.getElementById(
       'chat-' +
       guildId
     );
-
 
   chat.innerHTML =
     '<div class="empty">' +
@@ -2406,11 +1736,8 @@ socket.on(
         data.guildId
       ]
     ) {
-
       return;
-
     }
-
 
     if (
       selectedChannels[
@@ -2418,11 +1745,8 @@ socket.on(
       ] !==
       data.channelId
     ) {
-
       return;
-
     }
-
 
     addMessage(data);
 
@@ -2444,22 +1768,18 @@ function addMessage(
       data.guildId
     );
 
-
   if (!chat) {
     return;
   }
-
 
   const empty =
     chat.querySelector(
       '.empty'
     );
 
-
   if (empty) {
     empty.remove();
   }
-
 
   const message =
     document.createElement(
@@ -2468,7 +1788,6 @@ function addMessage(
 
   message.className =
     'message';
-
 
   const author =
     document.createElement(
@@ -2480,7 +1799,6 @@ function addMessage(
 
   author.textContent =
     data.author;
-
 
   const time =
     document.createElement(
@@ -2495,7 +1813,6 @@ function addMessage(
       data.timestamp
     ).toLocaleTimeString();
 
-
   const content =
     document.createElement(
       'div'
@@ -2506,7 +1823,6 @@ function addMessage(
 
   content.textContent =
     data.content;
-
 
   message.appendChild(
     author
@@ -2520,11 +1836,9 @@ function addMessage(
     content
   );
 
-
   chat.appendChild(
     message
   );
-
 
   chat.scrollTop =
     chat.scrollHeight;
@@ -2545,17 +1859,14 @@ async function sendMessage(
       guildId
     ];
 
-
   const input =
     document.getElementById(
       'message-' +
       guildId
     );
 
-
   const content =
     input.value.trim();
-
 
   if (!channelId) {
 
@@ -2564,48 +1875,34 @@ async function sendMessage(
     );
 
     return;
-
   }
-
 
   if (!content) {
     return;
   }
 
-
   const response =
     await fetch(
       '/api/send-message',
       {
-
-        method:
-          'POST',
+        method: 'POST',
 
         headers: {
-
           'Content-Type':
             'application/json'
-
         },
 
         body:
           JSON.stringify({
-
             guildId,
-
             channelId,
-
             content
-
           })
-
       }
     );
 
-
   const result =
     await response.json();
-
 
   if (!result.ok) {
 
@@ -2615,9 +1912,7 @@ async function sendMessage(
     );
 
     return;
-
   }
-
 
   input.value =
     '';
@@ -2661,34 +1956,28 @@ async function openInvite(
   inviteGuildId =
     guildId;
 
-
   const modal =
     document.getElementById(
       'inviteModal'
     );
 
-
   modal.style.display =
     'flex';
-
 
   const list =
     document.getElementById(
       'userList'
     );
 
-
   list.innerHTML =
     '<div class="empty">' +
     '사용자 목록을 불러오는 중...' +
     '</div>';
 
-
   document.getElementById(
     'inviteResult'
   ).textContent =
     '';
-
 
   try {
 
@@ -2697,10 +1986,8 @@ async function openInvite(
         '/api/app-users'
       );
 
-
     const result =
       await response.json();
-
 
     if (!result.ok) {
 
@@ -2710,7 +1997,6 @@ async function openInvite(
       );
 
     }
-
 
     if (
       !result.users.length
@@ -2722,17 +2008,10 @@ async function openInvite(
         '</div>';
 
       return;
-
     }
-
-
-    // 기존 방식처럼 중첩 템플릿 문자열을
-    // 사용하지 않고 DOM으로 직접 생성한다.
-    // 따라서 Render의 SyntaxError를 방지한다.
 
     list.innerHTML =
       '';
-
 
     result.users.forEach(
       function(user) {
@@ -2744,7 +2023,6 @@ async function openInvite(
 
         userBox.className =
           'user';
-
 
         const checkbox =
           document.createElement(
@@ -2760,11 +2038,9 @@ async function openInvite(
         checkbox.value =
           user.discord_user_id;
 
-
         userBox.appendChild(
           checkbox
         );
-
 
         if (user.avatar) {
 
@@ -2772,7 +2048,6 @@ async function openInvite(
             document.createElement(
               'img'
             );
-
 
           avatar.src =
             'https://cdn.discordapp.com/avatars/' +
@@ -2785,10 +2060,8 @@ async function openInvite(
             ) +
             '.png?size=128';
 
-
           avatar.alt =
             '';
-
 
           userBox.appendChild(
             avatar
@@ -2800,7 +2073,6 @@ async function openInvite(
             document.createElement(
               'div'
             );
-
 
           avatar.style.width =
             '40px';
@@ -2826,13 +2098,10 @@ async function openInvite(
           avatar.textContent =
             '👤';
 
-
           userBox.appendChild(
             avatar
           );
-
         }
-
 
         const info =
           document.createElement(
@@ -2841,7 +2110,6 @@ async function openInvite(
 
         info.className =
           'user-info';
-
 
         const name =
           document.createElement(
@@ -2856,7 +2124,6 @@ async function openInvite(
           user.username ||
           '알 수 없는 사용자';
 
-
         const id =
           document.createElement(
             'div'
@@ -2869,7 +2136,6 @@ async function openInvite(
           user.username ||
           user.discord_user_id;
 
-
         info.appendChild(
           name
         );
@@ -2878,11 +2144,9 @@ async function openInvite(
           id
         );
 
-
         userBox.appendChild(
           info
         );
-
 
         list.appendChild(
           userBox
@@ -2891,12 +2155,10 @@ async function openInvite(
       }
     );
 
-
   } catch (error) {
 
     list.innerHTML =
       '';
-
 
     const errorBox =
       document.createElement(
@@ -2910,11 +2172,9 @@ async function openInvite(
       error.message ||
       '사용자 목록을 가져오지 못했습니다.';
 
-
     list.appendChild(
       errorBox
     );
-
   }
 
 }
@@ -2930,7 +2190,6 @@ function closeInvite() {
     'inviteModal'
   ).style.display =
     'none';
-
 
   inviteGuildId =
     null;
@@ -2995,9 +2254,7 @@ async function inviteSelected() {
     );
 
     return;
-
   }
-
 
   const userIds =
     Array.from(
@@ -3010,7 +2267,6 @@ async function inviteSelected() {
         checkbox.value
     );
 
-
   if (!userIds.length) {
 
     alert(
@@ -3018,19 +2274,15 @@ async function inviteSelected() {
     );
 
     return;
-
   }
-
 
   const resultBox =
     document.getElementById(
       'inviteResult'
     );
 
-
   resultBox.textContent =
     '⏳ 서버 참가 처리 중...';
-
 
   try {
 
@@ -3038,34 +2290,25 @@ async function inviteSelected() {
       await fetch(
         '/api/invite-app-users',
         {
-
-          method:
-            'POST',
+          method: 'POST',
 
           headers: {
-
             'Content-Type':
               'application/json'
-
           },
 
           body:
             JSON.stringify({
-
               guildId:
                 inviteGuildId,
 
               userIds
-
             })
-
         }
       );
 
-
     const result =
       await response.json();
-
 
     if (!result.ok) {
 
@@ -3077,9 +2320,7 @@ async function inviteSelected() {
         );
 
       return;
-
     }
-
 
     const success =
       result.results
@@ -3089,7 +2330,6 @@ async function inviteSelected() {
         )
         .length;
 
-
     const failed =
       result.results
         .filter(
@@ -3098,10 +2338,17 @@ async function inviteSelected() {
         )
         .length;
 
-
-resultBox.textContent =
-  `✅ 완료: ${success}명 / 실패: ${failed}명`;
-
+    /*
+     * 중요:
+     * 여기서 백틱(`)을 사용하면
+     * 서버의 res.send(`...`)와 충돌할 수 있습니다.
+     */
+    resultBox.textContent =
+      '✅ 완료: ' +
+      success +
+      '명 / 실패: ' +
+      failed +
+      '명';
 
   } catch (error) {
 
@@ -3117,9 +2364,7 @@ resultBox.textContent =
 </body>
 
 </html>
-
     `);
-
   }
 );
 
@@ -3140,21 +2385,15 @@ app.post(
     } =
       req.body;
 
-
     guildSettings.set(
       guildId,
       {
-
         roleId,
-
         channelId
-
       }
     );
 
-
     res.redirect('/');
-
   }
 );
 
@@ -3173,12 +2412,10 @@ app.post(
     } =
       req.body;
 
-
     const settings =
       guildSettings.get(
         guildId
       );
-
 
     if (
       !settings ||
@@ -3187,54 +2424,38 @@ app.post(
     ) {
 
       return res.send(`
-
 <script>
-
 alert(
-'먼저 인증 역할과 인증 채널을 설정해 주세요.'
+  '먼저 인증 역할과 인증 채널을 설정해 주세요.'
 );
-
-location.href =
-'/';
-
+location.href = '/';
 </script>
-
       `);
 
     }
-
 
     const guild =
       client.guilds.cache.get(
         guildId
       );
 
-
     if (!guild) {
 
       return res.send(`
-
 <script>
-
 alert(
-'서버를 찾을 수 없습니다.'
+  '서버를 찾을 수 없습니다.'
 );
-
-location.href =
-'/';
-
+location.href = '/';
 </script>
-
       `);
 
     }
-
 
     const channel =
       guild.channels.cache.get(
         settings.channelId
       );
-
 
     if (
       !channel ||
@@ -3242,77 +2463,53 @@ location.href =
     ) {
 
       return res.send(`
-
 <script>
-
 alert(
-'인증 채널을 찾을 수 없습니다.'
+  '인증 채널을 찾을 수 없습니다.'
 );
-
-location.href =
-'/';
-
+location.href = '/';
 </script>
-
       `);
 
     }
-
 
     const oauth =
       createDiscordOAuthURL(
         guildId
       );
 
-
     const embed =
       new EmbedBuilder()
-
         .setTitle(
           '🔐 서버 인증'
         )
-
         .setDescription(
-
-          '서버 이용을 시작하시려면 아래 **인증하기** 버튼을 눌러주세요.\\n\\n' +
-
-          '인증 과정에서 Discord 앱 설치 및 서버 참가 권한을 요청합니다.\\n\\n' +
-
+          '서버 이용을 시작하시려면 아래 **인증하기** 버튼을 눌러주세요.\n\n' +
+          '인증 과정에서 Discord 앱 설치 및 서버 참가 권한을 요청합니다.\n\n' +
           '권한 승인 후 자동으로 서버 참가 및 인증 역할 지급이 진행됩니다.'
-
         )
-
         .setColor(
           0x5865F2
         )
-
         .setFooter({
-
           text:
             '인증봇'
-
         });
-
 
     const button =
       new ButtonBuilder()
-
         .setLabel(
           '인증하기'
         )
-
         .setEmoji(
           '✅'
         )
-
         .setStyle(
           ButtonStyle.Link
         )
-
         .setURL(
           oauth.url
         );
-
 
     const row =
       new ActionRowBuilder()
@@ -3320,11 +2517,9 @@ location.href =
           button
         );
 
-
     try {
 
       await channel.send({
-
         embeds: [
           embed
         ],
@@ -3332,25 +2527,16 @@ location.href =
         components: [
           row
         ]
-
       });
 
-
       res.send(`
-
 <script>
-
 alert(
-'인증 패널을 전송했습니다.'
+  '인증 패널을 전송했습니다.'
 );
-
-location.href =
-'/';
-
+location.href = '/';
 </script>
-
       `);
-
 
     } catch (error) {
 
@@ -3358,20 +2544,13 @@ location.href =
         error
       );
 
-
       res.send(`
-
 <script>
-
 alert(
-'인증 패널 전송에 실패했습니다.'
+  '인증 패널 전송에 실패했습니다.'
 );
-
-location.href =
-'/';
-
+location.href = '/';
 </script>
-
       `);
 
     }
@@ -3394,7 +2573,6 @@ app.get(
         ''
       );
 
-
     if (!guildId) {
 
       return res
@@ -3404,7 +2582,6 @@ app.get(
         );
 
     }
-
 
     if (
       !client.guilds.cache.has(
@@ -3420,12 +2597,10 @@ app.get(
 
     }
 
-
     const oauth =
       createDiscordOAuthURL(
         guildId
       );
-
 
     res.redirect(
       oauth.url
@@ -3450,11 +2625,9 @@ app.get(
     } =
       req.query;
 
-
     if (error) {
 
       return res.send(`
-
 <!DOCTYPE html>
 
 <html lang="ko">
@@ -3468,35 +2641,21 @@ app.get(
 <style>
 
 body {
-
   margin: 0;
-
   min-height: 100vh;
-
   background: #0f1117;
-
   color: white;
-
   font-family: Arial;
-
   display: flex;
-
   align-items: center;
-
   justify-content: center;
-
 }
 
 .box {
-
   background: #181b23;
-
   padding: 35px;
-
   border-radius: 18px;
-
   text-align: center;
-
 }
 
 </style>
@@ -3520,11 +2679,9 @@ Discord 인증이 취소되었습니다.
 </body>
 
 </html>
-
       `);
 
     }
-
 
     if (
       !code ||
@@ -3539,16 +2696,10 @@ Discord 인증이 취소되었습니다.
 
     }
 
-
-    // ==================================
-    // state 검증
-    // ==================================
-
     const stateData =
       verifyOAuthState(
         String(state)
       );
-
 
     if (!stateData) {
 
@@ -3560,22 +2711,15 @@ Discord 인증이 취소되었습니다.
 
     }
 
-
     const guildId =
       stateData.guildId;
 
-
     try {
-
-      // ==================================
-      // code → access token
-      // ==================================
 
       const tokenData =
         await exchangeCode(
           code
         );
-
 
       if (
         !tokenData.access_token
@@ -3587,36 +2731,20 @@ Discord 인증이 취소되었습니다.
 
       }
 
-
-      // ==================================
-      // Discord 사용자 정보
-      // ==================================
-
       const user =
         await getDiscordUser(
           tokenData.access_token
         );
-
-
-      // ==================================
-      // DB 저장
-      // ==================================
 
       await saveAppUser(
         user,
         tokenData
       );
 
-
-      // ==================================
-      // 서버 확인
-      // ==================================
-
       const guild =
         client.guilds.cache.get(
           guildId
         );
-
 
       if (!guild) {
 
@@ -3626,39 +2754,22 @@ Discord 인증이 취소되었습니다.
 
       }
 
-
-      // ==================================
-      // 인증 역할 확인
-      // ==================================
-
       const settings =
         guildSettings.get(
           guildId
         );
 
-
       const roleId =
         settings?.roleId ||
         null;
 
-
-      // ==================================
-      // 사용자 서버 참가
-      // ==================================
-
       const result =
         await addUserToGuild(
-
           guildId,
-
           user.id,
-
           tokenData.access_token,
-
           roleId
-
         );
-
 
       if (!result.ok) {
 
@@ -3667,9 +2778,7 @@ Discord 인증이 취소되었습니다.
           result
         );
 
-
         return res.send(`
-
 <!DOCTYPE html>
 
 <html lang="ko">
@@ -3683,37 +2792,22 @@ Discord 인증이 취소되었습니다.
 <style>
 
 body {
-
   margin: 0;
-
   min-height: 100vh;
-
   background: #0f1117;
-
   color: white;
-
   font-family: Arial;
-
   display: flex;
-
   align-items: center;
-
   justify-content: center;
-
 }
 
 .box {
-
   background: #181b23;
-
   padding: 35px;
-
   border-radius: 18px;
-
   max-width: 500px;
-
   text-align: center;
-
 }
 
 </style>
@@ -3744,15 +2838,9 @@ ${escapeHtml(
 </body>
 
 </html>
-
         `);
 
       }
-
-
-      // ==================================
-      // 역할 추가
-      // ==================================
 
       if (roleId) {
 
@@ -3763,12 +2851,10 @@ ${escapeHtml(
               user.id
             );
 
-
           const role =
             guild.roles.cache.get(
               roleId
             );
-
 
           if (
             role &&
@@ -3792,13 +2878,7 @@ ${escapeHtml(
 
       }
 
-
-      // ==================================
-      // 성공
-      // ==================================
-
       res.send(`
-
 <!DOCTYPE html>
 
 <html lang="ko">
@@ -3808,8 +2888,8 @@ ${escapeHtml(
 <meta charset="UTF-8">
 
 <meta
-name="viewport"
-content="width=device-width,initial-scale=1"
+  name="viewport"
+  content="width=device-width,initial-scale=1"
 >
 
 <title>
@@ -3819,62 +2899,35 @@ content="width=device-width,initial-scale=1"
 <style>
 
 body {
-
   margin: 0;
-
   min-height: 100vh;
-
   background: #0f1117;
-
   color: white;
-
   font-family: Arial;
-
   display: flex;
-
   align-items: center;
-
   justify-content: center;
-
 }
 
 .box {
-
-  width: min(
-    500px,
-    90vw
-  );
-
+  width: min(500px,90vw);
   background: #181b23;
-
   padding: 40px;
-
   border-radius: 20px;
-
   text-align: center;
-
-  box-shadow:
-    0 20px 60px
-    rgba(0,0,0,.5);
-
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
 }
 
 .check {
-
   font-size: 60px;
-
 }
 
 h1 {
-
   margin-top: 10px;
-
 }
 
 .name {
-
   color: #8ea1ff;
-
 }
 
 </style>
@@ -3918,9 +2971,7 @@ ${escapeHtml(
 </body>
 
 </html>
-
       `);
-
 
     } catch (error) {
 
@@ -3929,11 +2980,9 @@ ${escapeHtml(
         error
       );
 
-
       res
         .status(500)
         .send(`
-
 <!DOCTYPE html>
 
 <html lang="ko">
@@ -3949,35 +2998,21 @@ ${escapeHtml(
 <style>
 
 body {
-
   margin: 0;
-
   min-height: 100vh;
-
   background: #0f1117;
-
   color: white;
-
   font-family: Arial;
-
   display: flex;
-
   align-items: center;
-
   justify-content: center;
-
 }
 
 .box {
-
   background: #181b23;
-
   padding: 35px;
-
   border-radius: 18px;
-
   text-align: center;
-
 }
 
 </style>
@@ -4001,7 +3036,6 @@ body {
 </body>
 
 </html>
-
         `);
 
     }
@@ -4024,16 +3058,10 @@ app.get(
       const users =
         await getAppUsers();
 
-
       res.json({
-
-        ok:
-          true,
-
+        ok: true,
         users
-
       });
-
 
     } catch (error) {
 
@@ -4041,17 +3069,12 @@ app.get(
         error
       );
 
-
       res
         .status(500)
         .json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             '사용자 목록을 가져오지 못했습니다.'
-
         });
 
     }
@@ -4075,7 +3098,6 @@ app.post(
     } =
       req.body;
 
-
     if (
       typeof guildId !==
       'string'
@@ -4084,17 +3106,12 @@ app.post(
       return res
         .status(400)
         .json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             'guildId가 필요합니다.'
-
         });
 
     }
-
 
     if (
       !Array.isArray(userIds) ||
@@ -4104,17 +3121,12 @@ app.post(
       return res
         .status(400)
         .json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             '사용자를 한 명 이상 선택해 주세요.'
-
         });
 
     }
-
 
     if (
       userIds.length >
@@ -4124,67 +3136,41 @@ app.post(
       return res
         .status(400)
         .json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             '한 번에 최대 100명까지 처리할 수 있습니다.'
-
         });
 
     }
-
-
-    // ==================================
-    // 봇 서버 확인
-    // ==================================
 
     const guild =
       client.guilds.cache.get(
         guildId
       );
 
-
     if (!guild) {
 
       return res
         .status(404)
         .json({
-
-          ok:
-            false,
-
+          ok: false,
           error:
             '봇이 해당 서버에 들어가 있지 않습니다.'
-
         });
 
     }
-
-
-    // ==================================
-    // 서버 인증 역할
-    // ==================================
 
     const settings =
       guildSettings.get(
         guildId
       );
 
-
     const roleId =
       settings?.roleId ||
       null;
 
-
     const results =
       [];
-
-
-    // ==================================
-    // 사용자별 처리
-    // ==================================
 
     for (
       const userId
@@ -4198,66 +3184,41 @@ app.post(
             userId
           );
 
-
         if (!token) {
 
           results.push({
-
             userId,
-
-            ok:
-              false,
-
+            ok: false,
             error:
               'OAuth 권한이 없거나 토큰이 만료되었습니다.'
-
           });
 
           continue;
-
         }
-
 
         const result =
           await addUserToGuild(
-
             guildId,
-
             userId,
-
             token,
-
             roleId
-
           );
-
 
         if (!result.ok) {
 
           results.push({
-
             userId,
-
-            ok:
-              false,
-
+            ok: false,
             status:
               result.status,
 
             error:
               result.data?.message ||
               '서버 참가에 실패했습니다.'
-
           });
 
           continue;
-
         }
-
-
-        // ==================================
-        // 역할 지급
-        // ==================================
 
         if (roleId) {
 
@@ -4268,12 +3229,10 @@ app.post(
                 userId
               );
 
-
             const role =
               guild.roles.cache.get(
                 roleId
               );
-
 
             if (
               role &&
@@ -4297,16 +3256,10 @@ app.post(
 
         }
 
-
         results.push({
-
           userId,
-
-          ok:
-            true
-
+          ok: true
         });
-
 
       } catch (error) {
 
@@ -4315,31 +3268,20 @@ app.post(
           error
         );
 
-
         results.push({
-
           userId,
-
-          ok:
-            false,
-
+          ok: false,
           error:
             '처리 중 오류가 발생했습니다.'
-
         });
 
       }
 
     }
 
-
     res.json({
-
-      ok:
-        true,
-
+      ok: true,
       results
-
     });
 
   }
@@ -4362,7 +3304,6 @@ app.post(
     } =
       req.body;
 
-
     if (
       typeof content !==
       'string' ||
@@ -4370,17 +3311,12 @@ app.post(
     ) {
 
       return res.json({
-
-        ok:
-          false,
-
+        ok: false,
         error:
           '메시지를 입력해 주세요.'
-
       });
 
     }
-
 
     if (
       content.length >
@@ -4388,44 +3324,32 @@ app.post(
     ) {
 
       return res.json({
-
-        ok:
-          false,
-
+        ok: false,
         error:
           'Discord 메시지는 2000자를 초과할 수 없습니다.'
-
       });
 
     }
-
 
     const guild =
       client.guilds.cache.get(
         guildId
       );
 
-
     if (!guild) {
 
       return res.json({
-
-        ok:
-          false,
-
+        ok: false,
         error:
           '서버를 찾을 수 없습니다.'
-
       });
 
     }
-
 
     const channel =
       guild.channels.cache.get(
         channelId
       );
-
 
     if (
       !channel ||
@@ -4433,35 +3357,23 @@ app.post(
     ) {
 
       return res.json({
-
-        ok:
-          false,
-
+        ok: false,
         error:
           '채널을 찾을 수 없습니다.'
-
       });
 
     }
 
-
     try {
 
       await channel.send({
-
         content:
           content.trim()
-
       });
-
 
       return res.json({
-
-        ok:
-          true
-
+        ok: true
       });
-
 
     } catch (error) {
 
@@ -4470,15 +3382,10 @@ app.post(
         error
       );
 
-
       return res.json({
-
-        ok:
-          false,
-
+        ok: false,
         error:
           'Discord에 메시지를 전송하지 못했습니다.'
-
       });
 
     }
@@ -4496,27 +3403,22 @@ function escapeHtml(
 ) {
 
   return String(text)
-
     .replace(
       /&/g,
       '&amp;'
     )
-
     .replace(
       /</g,
       '&lt;'
     )
-
     .replace(
       />/g,
       '&gt;'
     )
-
     .replace(
       /"/g,
       '&quot;'
     )
-
     .replace(
       /'/g,
       '&#039;'
@@ -4535,7 +3437,6 @@ async function start() {
 
     await initDatabase();
 
-
     server.listen(
       PORT,
       () => {
@@ -4547,14 +3448,11 @@ async function start() {
       }
     );
 
-
     console.log(
       '🔄 Discord 로그인 시도 중...'
     );
 
-
     client.login(TOKEN)
-
       .then(
         () => {
 
@@ -4564,7 +3462,6 @@ async function start() {
 
         }
       )
-
       .catch(
         error => {
 
@@ -4575,7 +3472,6 @@ async function start() {
 
         }
       );
-
 
   } catch (error) {
 
@@ -4589,6 +3485,5 @@ async function start() {
   }
 
 }
-
 
 start();
