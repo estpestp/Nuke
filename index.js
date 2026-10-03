@@ -340,7 +340,6 @@ async function registerVerificationCommand(guild) {
     }
 
     console.log(`✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name}`);
-${guild.name}`);
   } catch (error) {
     console.error(
       `❌ /인증 명령어 등록 오류 (${guild.name}):`,
