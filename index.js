@@ -336,14 +336,7 @@ async function registerVerificationCommand(guild) {
 
       new SlashCommandBuilder()
         .setName('인증설정')
-        .setDescription('인증 역할과 인증 채널을 설정합니다.')
-        .addChannelOption(option =>
-          option
-            .setName('채널')
-            .setDescription('인증 패널을 보낼 채널')
-            .setRequired(true)
-            
-        )
+        .setDescription('현재 채널을 인증 채널로 설정하고 인증 역할을 지정합니다.')
         .addRoleOption(option =>
           option
             .setName('역할')
@@ -432,11 +425,11 @@ client.on(
           }
 
           const role = interaction.options.getRole('역할', false);
-          const channel = interaction.options.getChannel('채널', false);
+          const channel = interaction.channel;
 
           if (!role || !channel) {
             return interaction.reply({
-              content: '❌ 인증 역할과 인증 채널을 모두 선택해 주세요. 명령어가 갱신된 뒤에도 문제가 계속되면 /인증설정을 다시 입력해 주세요.',
+              content: '❌ 인증 역할을 선택할 수 있는 채널에서 명령어를 실행해 주세요.',
               ephemeral: true
             });
           }
@@ -471,7 +464,7 @@ client.on(
           }
 
           return interaction.reply({
-            content: `✅ 인증 설정이 완료되었습니다.\n\n🎭 인증 역할: <@&${role.id}>\n📨 인증 채널: <#${channel.id}>\n\n이제 /인증 명령어를 사용할 수 있습니다.`,
+            content: `✅ 인증 설정이 완료되었습니다.\n\n🎭 인증 역할: <@&${role.id}>\n📨 현재 채널을 인증 채널로 설정했습니다: <#${channel.id}>\n\n이제 /인증 명령어를 사용할 수 있습니다.`,
             ephemeral: true
           });
         }
