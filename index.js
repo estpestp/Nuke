@@ -305,36 +305,42 @@ async function registerVerificationCommand(guild) {
       ? data.find(item => item.name === '인증')
       : null;
 
-    const body = JSON.stringify({
-      name: '인증',
-      description: '봇의 역할 위치를 확인합니다.'
-    });
+    const commands = [
+      {
+        name: '인증',
+        description: '봇의 역할 위치를 확인합니다.'
+      },
+      {
+        name: '인증설정',
+        description: '인증 역할과 인증 채널을 설정합니다.',
+        options: [
+          { type: 8, name: '역할', description: '인증 완료 후 지급할 역할', required: true },
+          { type: 7, name: '채널', description: '인증 패널을 보낼 채널', required: true, channel_types: [0] }
+        ]
+      }
+    ];
 
-    if (command) {
-      await discordFetch(
-        `${endpoint}/${command.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bot ${TOKEN}`
-          },
-          body
-        }
-      );
-    } else {
-      await discordFetch(
-        endpoint,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bot ${TOKEN}`
-          },
-          body
-        }
-      );
+    for (const bodyObject of commands) {
+      const body = JSON.stringify(bodyObject);
+      const existing = Array.isArray(data)
+        ? data.find(item => item.name === bodyObject.name)
+        : null;
+
+      if (existing) {
+        await discordFetch(
+          endpoint + '/' + existing.id,
+          { method: 'PATCH', headers: { Authorization: 'Bot ' + TOKEN }, body }
+        );
+      } else {
+        await discordFetch(
+          endpoint,
+          { method: 'POST', headers: { Authorization: 'Bot ' + TOKEN }, body }
+        );
+      }
     }
 
-    console.log(`✅ /인증 명령어 등록 완료: ${guild.name}`);
+    console.log(`✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name}`);
+${guild.name}`);
   } catch (error) {
     console.error(
       `❌ /인증 명령어 등록 오류 (${guild.name}):`,
@@ -369,6 +375,42 @@ client.on(
   async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
+        if (!interaction.guild) {
+          return interaction.reply({
+            content: '❌ 이 명령어는 서버에서만 사용할 수 있습니다.',
+            ephemeral: true
+          });
+        }
+
+        if (interaction.commandName === '인증설정') {
+          if (!interaction.memberPermissions?.has('Administrator')) {
+            return interaction.reply({ content: '❌ 이 명령어는 서버 관리자만 사용할 수 있습니다.', ephemeral: true });
+          }
+
+          const role = interaction.options.getRole('역할', true);
+          const channel = interaction.options.getChannel('채널', true);
+          const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe();
+
+          if (!botMember.permissions.has('ManageRoles')) {
+            return interaction.reply({ content: '❌ 봇에게 역할 관리 권한이 없습니다.', ephemeral: true });
+          }
+          if (role.id === interaction.guild.id) {
+            return interaction.reply({ content: '❌ @everyone 역할은 인증 역할로 사용할 수 없습니다.', ephemeral: true });
+          }
+          if (role.position >= botMember.roles.highest.position) {
+            return interaction.reply({ content: '❌ 선택한 역할이 봇의 최고 역할보다 높거나 같습니다. 봇 역할을 더 위로 올려주세요.', ephemeral: true });
+          }
+          if (!channel.isTextBased()) {
+            return interaction.reply({ content: '❌ 텍스트 채널을 선택해 주세요.', ephemeral: true });
+          }
+
+          guildSettings.set(interaction.guild.id, { roleId: role.id, channelId: channel.id });
+          return interaction.reply({
+            content: `✅ 인증 설정이 완료되었습니다.\n\n🎭 인증 역할: <@&${role.id}>\n📨 인증 채널: <#${channel.id}>\n\n이제 /인증 명령어를 사용할 수 있습니다.`,
+            ephemeral: true
+          });
+        }
+
         if (interaction.commandName !== '인증') {
           return;
         }
