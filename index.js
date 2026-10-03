@@ -118,6 +118,15 @@ async function initDatabase() {
     ADD COLUMN IF NOT EXISTS refresh_token TEXT;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS guild_settings (
+      guild_id VARCHAR(32) PRIMARY KEY,
+      role_id VARCHAR(32),
+      channel_id VARCHAR(32),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
   console.log(
     '✅ PostgreSQL 데이터베이스 준비 완료'
   );
@@ -165,6 +174,43 @@ app.use(
 
 const guildSettings =
   new Map();
+
+async function loadGuildSettings() {
+  const result = await pool.query(
+    'SELECT guild_id, role_id, channel_id FROM guild_settings'
+  );
+
+  for (const row of result.rows) {
+    guildSettings.set(row.guild_id, {
+      roleId: row.role_id,
+      channelId: row.channel_id
+    });
+  }
+
+  console.log(
+    `✅ 서버별 인증 설정 ${result.rows.length}개를 불러왔습니다.`
+  );
+}
+
+async function saveGuildSettings(guildId, roleId, channelId) {
+  guildSettings.set(guildId, {
+    roleId,
+    channelId
+  });
+
+  await pool.query(
+    `
+      INSERT INTO guild_settings (guild_id, role_id, channel_id, updated_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (guild_id)
+      DO UPDATE SET
+        role_id = EXCLUDED.role_id,
+        channel_id = EXCLUDED.channel_id,
+        updated_at = NOW()
+    `,
+    [guildId, roleId, channelId]
+  );
+}
 
 
 // ========================================
@@ -403,7 +449,20 @@ client.on(
             return interaction.reply({ content: '❌ 텍스트 채널을 선택해 주세요.', ephemeral: true });
           }
 
-          guildSettings.set(interaction.guild.id, { roleId: role.id, channelId: channel.id });
+          try {
+            await saveGuildSettings(
+              interaction.guild.id,
+              role.id,
+              channel.id
+            );
+          } catch (error) {
+            console.error('❌ 인증 설정 저장 오류:', error);
+            return interaction.reply({
+              content: '❌ 인증 설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+              ephemeral: true
+            });
+          }
+
           return interaction.reply({
             content: `✅ 인증 설정이 완료되었습니다.\n\n🎭 인증 역할: <@&${role.id}>\n📨 인증 채널: <#${channel.id}>\n\n이제 /인증 명령어를 사용할 수 있습니다.`,
             ephemeral: true
@@ -2755,15 +2814,16 @@ app.post(
     } =
       req.body;
 
-    guildSettings.set(
-      guildId,
-      {
-        roleId,
-        channelId
-      }
-    );
-
-    res.redirect('/');
+    saveGuildSettings(
+      String(guildId),
+      String(roleId || ''),
+      String(channelId || '')
+    )
+      .then(() => res.redirect('/'))
+      .catch(error => {
+        console.error('❌ 관리자 페이지 인증 설정 저장 오류:', error);
+        res.status(500).send('인증 설정 저장에 실패했습니다.');
+      });
   }
 );
 
@@ -3734,6 +3794,7 @@ async function start() {
   try {
 
     await initDatabase();
+    await loadGuildSettings();
 
     server.listen(
       PORT,
