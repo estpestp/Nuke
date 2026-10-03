@@ -4,21 +4,28 @@ const TARGET_URL = 'https://nuke-iukw.onrender.com/';
 const INTERVAL = 10 * 60 * 1000; // 10분
 
 function ping() {
-  https.get(TARGET_URL, (res) => {
-    console.log(
-      `[${new Date().toLocaleString('ko-KR')}] 🏓 핑 완료 - HTTP ${res.statusCode}`
-    );
+  const start = Date.now();
 
-    res.on('data', () => {});
-  }).on('error', (err) => {
+  const request = https.get(TARGET_URL, (res) => {
+    res.resume();
+
+    const time = Date.now() - start;
+
+    console.log(
+      `[${new Date().toISOString()}] 🏓 Render 핑 완료 | HTTP ${res.statusCode} | ${time}ms`
+    );
+  });
+
+  request.setTimeout(30000, () => {
+    request.destroy(new Error('요청 시간 초과'));
+  });
+
+  request.on('error', (error) => {
     console.error(
-      `[${new Date().toLocaleString('ko-KR')}] ❌ 핑 실패 - ${err.message}`
+      `[${new Date().toISOString()}] ❌ Render 핑 실패 | ${error.message}`
     );
   });
 }
 
-// 시작하자마자 한 번 실행
 ping();
-
-// 이후 10분마다 실행
 setInterval(ping, INTERVAL);
