@@ -431,8 +431,16 @@ client.on(
             return interaction.reply({ content: '❌ 이 명령어는 서버 관리자만 사용할 수 있습니다.', ephemeral: true });
           }
 
-          const role = interaction.options.getRole('역할', true);
-          const channel = interaction.options.getChannel('채널', true);
+          const role = interaction.options.getRole('역할', false);
+          const channel = interaction.options.getChannel('채널', false);
+
+          if (!role || !channel) {
+            return interaction.reply({
+              content: '❌ 인증 역할과 인증 채널을 모두 선택해 주세요. 명령어가 갱신된 뒤에도 문제가 계속되면 /인증설정을 다시 입력해 주세요.',
+              ephemeral: true
+            });
+          }
+
           const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe();
 
           if (!botMember.permissions.has('ManageRoles')) {
