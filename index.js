@@ -222,6 +222,10 @@ client.once(
       `📡 현재 ${client.guilds.cache.size}개의 서버에 연결되어 있습니다.`
     );
 
+    for (const guild of client.guilds.cache.values()) {
+      await registerVerificationCommand(guild);
+    }
+
     broadcastBotStatus();
   }
 );
@@ -268,6 +272,172 @@ client.on(
     );
 
     broadcastBotStatus();
+  }
+);
+
+
+// ========================================
+// /인증 명령어 및 역할 확인
+// ========================================
+
+async function registerVerificationCommand(guild) {
+  try {
+    const endpoint =
+      `/applications/${CLIENT_ID}/guilds/${guild.id}/commands`;
+
+    const {
+      response,
+      data
+    } = await discordFetch(endpoint, {
+      headers: {
+        Authorization: `Bot ${TOKEN}`
+      }
+    });
+
+    if (!response.ok) {
+      console.error(
+        `❌ /인증 명령어 목록 확인 실패 (${guild.name}):`,
+        data
+      );
+      return;
+    }
+
+    const command = Array.isArray(data)
+      ? data.find(item => item.name === '인증')
+      : null;
+
+    const body = JSON.stringify({
+      name: '인증',
+      description: '봇의 역할 위치를 확인합니다.'
+    });
+
+    if (command) {
+      await discordFetch(
+        `${endpoint}/${command.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bot ${TOKEN}`
+          },
+          body
+        }
+      );
+    } else {
+      await discordFetch(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bot ${TOKEN}`
+          },
+          body
+        }
+      );
+    }
+
+    console.log(`✅ /인증 명령어 등록 완료: ${guild.name}`);
+  } catch (error) {
+    console.error(
+      `❌ /인증 명령어 등록 오류 (${guild.name}):`,
+      error
+    );
+  }
+}
+
+async function checkBotRolePosition(guild) {
+  const botMember =
+    guild.members.me ||
+    await guild.members.fetchMe();
+
+  const botRole =
+    botMember.roles.highest;
+
+  const highestRole =
+    guild.roles.cache
+      .filter(role => !role.managed && role.id !== guild.id)
+      .sort((a, b) => b.position - a.position)
+      .first();
+
+  if (!highestRole) {
+    return true;
+  }
+
+  return botRole.position >= highestRole.position;
+}
+
+client.on(
+  'interactionCreate',
+  async interaction => {
+    try {
+      if (interaction.isChatInputCommand()) {
+        if (interaction.commandName !== '인증') {
+          return;
+        }
+
+        if (!interaction.guild) {
+          return interaction.reply({
+            content: '❌ 이 명령어는 서버에서만 사용할 수 있습니다.',
+            ephemeral: true
+          });
+        }
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+              new ButtonBuilder()
+                .setCustomId('check_bot_role')
+                .setLabel('역할 확인')
+                .setEmoji('🔎')
+                .setStyle(ButtonStyle.Primary)
+            );
+
+        await interaction.reply({
+          content: '⚠️ 봇의 역할을 제일 높게 설정 해주세요.',
+          components: [row]
+        });
+
+        return;
+      }
+
+      if (interaction.isButton()) {
+        if (interaction.customId !== 'check_bot_role') {
+          return;
+        }
+
+        if (!interaction.guild) {
+          return interaction.reply({
+            content: '❌ 서버에서만 확인할 수 있습니다.',
+            ephemeral: true
+          });
+        }
+
+        const isHighest =
+          await checkBotRolePosition(
+            interaction.guild
+          );
+
+        if (isHighest) {
+          await interaction.update({
+            content: '✅ 역할 확인 완료! 봇의 역할이 현재 가장 높은 위치에 있습니다.',
+            components: []
+          });
+        } else {
+          await interaction.reply({
+            content: '❌ 아직 봇의 역할이 가장 높지 않습니다. 서버 설정에서 봇의 역할을 제일 위로 올린 뒤 다시 확인해 주세요.',
+            ephemeral: true
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ 역할 확인 처리 오류:', error);
+
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: '❌ 역할 확인 중 오류가 발생했습니다.',
+          ephemeral: true
+        });
+      }
+    }
   }
 );
 
