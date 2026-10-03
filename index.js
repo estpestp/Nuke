@@ -342,7 +342,12 @@ async function registerVerificationCommand(guild) {
             .setName('채널')
             .setDescription('인증 패널을 보낼 채널')
             .setRequired(true)
-            .addChannelTypes(ChannelType.GuildText)
+            .addChannelTypes(
+              ChannelType.GuildText,
+              ChannelType.GuildAnnouncement,
+              ChannelType.GuildForum,
+              ChannelType.GuildStageVoice
+            )
         )
         .addRoleOption(option =>
           option
