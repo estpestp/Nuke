@@ -12,7 +12,9 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  SlashCommandBuilder,
+  ChannelType
 } = require('discord.js');
 
 const app = express();
@@ -327,64 +329,43 @@ client.on(
 
 async function registerVerificationCommand(guild) {
   try {
-    const endpoint =
-      `/applications/${CLIENT_ID}/guilds/${guild.id}/commands`;
-
-    const {
-      response,
-      data
-    } = await discordFetch(endpoint, {
-      headers: {
-        Authorization: `Bot ${TOKEN}`
-      }
-    });
-
-    if (!response.ok) {
-      console.error(
-        `❌ /인증 명령어 목록 확인 실패 (${guild.name}):`,
-        data
-      );
-      return;
-    }
-
-    const command = Array.isArray(data)
-      ? data.find(item => item.name === '인증')
-      : null;
-
     const commands = [
-      {
-        name: '인증',
-        description: '봇의 역할 위치를 확인합니다.'
-      },
-      {
-        name: '인증설정',
-        description: '인증 역할과 인증 채널을 설정합니다.',
-        options: [
-          { type: 7, name: '채널', description: '인증 패널을 보낼 채널', required: true, channel_types: [0] },
-          { type: 8, name: '역할', description: '인증 완료 후 지급할 역할', required: true }
-        ]
-      }
-    ];
+      new SlashCommandBuilder()
+        .setName('인증')
+        .setDescription('봇의 역할 위치를 확인합니다.'),
 
-    const { response: overwriteResponse, data: overwriteData } =
-      await discordFetch(endpoint, {
-        method: 'PUT',
-        headers: {
-          Authorization: 'Bot ' + TOKEN,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(commands)
-      });
+      new SlashCommandBuilder()
+        .setName('인증설정')
+        .setDescription('인증 역할과 인증 채널을 설정합니다.')
+        .addChannelOption(option =>
+          option
+            .setName('채널')
+            .setDescription('인증 패널을 보낼 채널')
+            .setRequired(true)
+            .addChannelTypes(ChannelType.GuildText)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('역할')
+            .setDescription('인증 완료 후 지급할 역할')
+            .setRequired(true)
+        )
+    ].map(command => command.toJSON());
 
-    if (!overwriteResponse.ok) {
-      console.error(
-        `❌ /인증 및 /인증설정 명령어 덮어쓰기 실패 (${guild.name}):`,
-        overwriteData
-      );
-      return;
-    }
+    await guild.commands.set(commands);
 
-    console.log(`✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name}`);
+    const registered = await guild.commands.fetch();
+    const verificationSetup = registered.find(
+      command => command.name === '인증설정'
+    );
+
+    const optionNames = verificationSetup?.options?.map(
+      option => option.name
+    ) || [];
+
+    console.log(
+      `✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name} | 옵션: ${optionNames.join(', ')}`
+    );
   } catch (error) {
     console.error(
       `❌ /인증 명령어 등록 오류 (${guild.name}):`,
@@ -392,7 +373,6 @@ async function registerVerificationCommand(guild) {
     );
   }
 }
-
 async function checkBotRolePosition(guild) {
   const botMember =
     guild.members.me ||
