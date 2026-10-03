@@ -547,6 +547,124 @@ function requireLogin(
 
 
 // ========================================
+// 관리자 Discord OAuth
+// ========================================
+
+function createAdminOAuthState() {
+  const timestamp = Date.now();
+  const nonce = crypto.randomBytes(24).toString('hex');
+  const payload = `admin.${timestamp}.${nonce}`;
+  const signature = crypto
+    .createHmac('sha256', SESSION_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  return Buffer
+    .from(`${payload}.${signature}`)
+    .toString('base64url');
+}
+
+function createAdminOAuthURL() {
+  const state = createAdminOAuthState();
+
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: 'https://nuke-iukw.onrender.com/auth/admin/callback',
+    scope: 'identify guilds',
+    state,
+    prompt: 'consent'
+  });
+
+  return {
+    state,
+    url: `https://discord.com/oauth2/authorize?${params.toString()}`
+  };
+}
+
+function verifyAdminOAuthState(state) {
+  try {
+    const decoded = Buffer
+      .from(state, 'base64url')
+      .toString('utf8');
+
+    const parts = decoded.split('.');
+
+    if (parts.length !== 4 || parts[0] !== 'admin') {
+      return false;
+    }
+
+    const [, timestampString, nonce, signature] = parts;
+
+    if (!timestampString || !nonce || !signature) {
+      return false;
+    }
+
+    const payload = `admin.${timestampString}.${nonce}`;
+    const expected = crypto
+      .createHmac('sha256', SESSION_SECRET)
+      .update(payload)
+      .digest('hex');
+
+    const providedBuffer = Buffer.from(signature, 'utf8');
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+
+    if (
+      providedBuffer.length !== expectedBuffer.length ||
+      !crypto.timingSafeEqual(providedBuffer, expectedBuffer)
+    ) {
+      return false;
+    }
+
+    const timestamp = Number(timestampString);
+
+    return Number.isFinite(timestamp) &&
+      Date.now() - timestamp <= 10 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+async function getDiscordGuilds(accessToken) {
+  const { response, data } = await discordFetch(
+    '/users/@me/guilds',
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message || 'Discord 서버 목록을 가져오지 못했습니다.'
+    );
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
+async function isDiscordAdministrator(accessToken) {
+  const guilds = await getDiscordGuilds(accessToken);
+
+  const botGuildIds = new Set(
+    client.guilds.cache.map(guild => guild.id)
+  );
+
+  return guilds.some(guild => {
+    if (!botGuildIds.has(guild.id)) {
+      return false;
+    }
+
+    const permissions = BigInt(guild.permissions || '0');
+    const ADMINISTRATOR = 1n << 3n;
+
+    return (permissions & ADMINISTRATOR) === ADMINISTRATOR;
+  });
+}
+
+
+// ========================================
 // OAuth State 생성
 // ========================================
 
@@ -1177,15 +1295,27 @@ async function addUserToGuild(
 app.get(
   '/login',
   (req, res) => {
+    if (req.session.loggedIn) {
+      return res.redirect('/');
+    }
+
+    const adminOAuth = createAdminOAuthURL();
+
     res.send(`
 <!DOCTYPE html>
+
 <html lang="ko">
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>인증봇 로그인</title>
+
+<title>관리자 로그인</title>
 
 <style>
+
 * {
   box-sizing: border-box;
 }
@@ -1202,64 +1332,53 @@ body {
 }
 
 .login {
-  width: 350px;
+  width: min(420px, 90vw);
   background: #181b23;
   padding: 30px;
   border-radius: 18px;
   box-shadow: 0 15px 50px rgba(0,0,0,.4);
+  text-align: center;
 }
 
 h1 {
   margin-top: 0;
 }
 
-input {
-  width: 100%;
-  padding: 14px;
-  margin: 15px 0;
-  background: #0f1117;
-  color: white;
-  border: 1px solid #343846;
-  border-radius: 9px;
-}
-
-button {
+a {
+  display: block;
   width: 100%;
   padding: 14px;
   background: #5865f2;
   color: white;
-  border: 0;
+  text-decoration: none;
   border-radius: 9px;
-  cursor: pointer;
   font-weight: bold;
 }
+
+.notice {
+  color: #aeb4c2;
+  line-height: 1.6;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
 </style>
+
 </head>
 
 <body>
 
 <div class="login">
 
-<h1>🤖 인증봇</h1>
+<h1>🤖 인증봇 관리자</h1>
 
-<p>
-관리자 패널에 로그인하세요.
+<p class="notice">
+Discord 관리자 권한이 있는 계정만 관리자 페이지를 사용할 수 있습니다.
 </p>
 
-<form method="POST" action="/login">
-
-<input
-  type="password"
-  name="password"
-  placeholder="비밀번호"
-  required
->
-
-<button type="submit">
-로그인
-</button>
-
-</form>
+<a href="${escapeHtml(adminOAuth.url)}">
+🔐 Discord로 관리자 로그인
+</a>
 
 </div>
 
@@ -1271,28 +1390,85 @@ button {
 
 
 // ========================================
-// 로그인 처리
+// Discord 관리자 로그인 처리
 // ========================================
 
-app.post(
-  '/login',
+app.get(
+  '/auth/admin',
   (req, res) => {
-    if (
-      req.body.password !==
-      ADMIN_PASSWORD
-    ) {
-      return res.send(`
-<script>
-alert('비밀번호가 올바르지 않습니다.');
-location.href = '/login';
-</script>
-      `);
+    const oauth = createAdminOAuthURL();
+    res.redirect(oauth.url);
+  }
+);
+
+app.get(
+  '/auth/admin/callback',
+  async (req, res) => {
+    const { code, state, error } = req.query;
+
+    if (error || !code || !state || !verifyAdminOAuthState(String(state))) {
+      return res.status(400).send('관리자 로그인 요청이 유효하지 않거나 만료되었습니다.');
     }
 
-    req.session.loggedIn =
-      true;
+    try {
+      const body = new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code: String(code),
+        redirect_uri: 'https://nuke-iukw.onrender.com/auth/admin/callback'
+      });
 
-    res.redirect('/');
+      const tokenResponse = await fetch(
+        `${DISCORD_API}/oauth2/token`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body
+        }
+      );
+
+      const tokenData = await tokenResponse.json();
+
+      if (!tokenResponse.ok || !tokenData.access_token) {
+        throw new Error('Discord 관리자 로그인 토큰을 받지 못했습니다.');
+      }
+
+      if (!await isDiscordAdministrator(tokenData.access_token)) {
+        return res.status(403).send(`
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>접근 거부</title>
+<style>
+body { margin:0; min-height:100vh; background:#0f1117; color:white; font-family:Arial,sans-serif; display:flex; align-items:center; justify-content:center; }
+.box { background:#181b23; padding:35px; border-radius:18px; text-align:center; width:min(500px,90vw); }
+</style>
+</head>
+<body>
+<div class="box">
+<h1>🚫 관리자 권한이 필요합니다.</h1>
+<p>봇이 들어가 있는 서버 중 관리자 권한이 있는 Discord 계정만 사용할 수 있습니다.</p>
+<p>Discord 서버 관리자 권한을 확인한 뒤 다시 로그인해 주세요.</p>
+</div>
+</body>
+</html>
+        `);
+      }
+
+      req.session.loggedIn = true;
+      req.session.adminDiscordUser = true;
+
+      req.session.save(() => {
+        res.redirect('/');
+      });
+    } catch (error) {
+      console.error('❌ 관리자 Discord 로그인 오류:', error);
+      res.status(500).send('관리자 로그인 처리 중 오류가 발생했습니다.');
+    }
   }
 );
 
