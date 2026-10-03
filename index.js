@@ -219,7 +219,7 @@ function broadcastBotStatus() {
 
 client.once(
   'ready',
-  () => {
+  async () => {
     console.log(
       `✅ Discord 로그인 완료: ${client.user.tag}`
     );
