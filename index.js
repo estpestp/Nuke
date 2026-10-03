@@ -360,8 +360,8 @@ async function registerVerificationCommand(guild) {
         name: '인증설정',
         description: '인증 역할과 인증 채널을 설정합니다.',
         options: [
-          { type: 8, name: '역할', description: '인증 완료 후 지급할 역할', required: true },
-          { type: 7, name: '채널', description: '인증 패널을 보낼 채널', required: true, channel_types: [0] }
+          { type: 7, name: '채널', description: '인증 패널을 보낼 채널', required: true, channel_types: [0] },
+          { type: 8, name: '역할', description: '인증 완료 후 지급할 역할', required: true }
         ]
       }
     ];
