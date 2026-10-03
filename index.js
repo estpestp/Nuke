@@ -1295,183 +1295,56 @@ async function addUserToGuild(
 app.get(
   '/login',
   (req, res) => {
-    if (req.session.loggedIn) {
-      return res.redirect('/');
-    }
-
-    const adminOAuth = createAdminOAuthURL();
+    if (req.session.loggedIn) return res.redirect('/');
 
     res.send(`
 <!DOCTYPE html>
-
 <html lang="ko">
-
 <head>
-
 <meta charset="UTF-8">
-
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>관리자 로그인</title>
-
 <style>
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: #0f1117;
-  color: white;
-  font-family: Arial, sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.login {
-  width: min(420px, 90vw);
-  background: #181b23;
-  padding: 30px;
-  border-radius: 18px;
-  box-shadow: 0 15px 50px rgba(0,0,0,.4);
-  text-align: center;
-}
-
-h1 {
-  margin-top: 0;
-}
-
-a {
-  display: block;
-  width: 100%;
-  padding: 14px;
-  background: #5865f2;
-  color: white;
-  text-decoration: none;
-  border-radius: 9px;
-  font-weight: bold;
-}
-
-.notice {
-  color: #aeb4c2;
-  line-height: 1.6;
-  font-size: 14px;
-  margin-bottom: 20px;
-}
-
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0f1117;color:white;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center}.login{width:min(420px,90vw);background:#181b23;padding:30px;border-radius:18px;box-shadow:0 15px 50px rgba(0,0,0,.4);text-align:center}input{width:100%;padding:14px;margin:12px 0;background:#10131a;color:white;border:1px solid #303542;border-radius:9px;font-size:16px}button{width:100%;padding:14px;background:#5865f2;color:white;border:0;border-radius:9px;font-weight:bold;font-size:16px;cursor:pointer}.notice{color:#aeb4c2;line-height:1.6;font-size:14px;margin-bottom:20px}
 </style>
-
 </head>
-
 <body>
-
 <div class="login">
-
-<h1>🤖 인증봇 관리자</h1>
-
-<p class="notice">
-Discord 관리자 권한이 있는 계정만 관리자 페이지를 사용할 수 있습니다.
-</p>
-
-<a href="${escapeHtml(adminOAuth.url)}">
-🔐 Discord로 관리자 로그인
-</a>
-
+<h1>🤖 관리자 로그인</h1>
+<p class="notice">관리자 비밀번호를 입력해 주세요.</p>
+<form method="POST" action="/login">
+<input type="password" name="password" placeholder="관리자 비밀번호" required autocomplete="current-password">
+<button type="submit">🔐 로그인</button>
+</form>
 </div>
-
 </body>
-</html>
-    `);
+</html>`);
   }
 );
 
-
-// ========================================
-// Discord 관리자 로그인 처리
-// ========================================
-
-app.get(
-  '/auth/admin',
+app.post(
+  '/login',
   (req, res) => {
-    const oauth = createAdminOAuthURL();
-    res.redirect(oauth.url);
-  }
-);
+    const password = String(req.body?.password || '');
 
-app.get(
-  '/auth/admin/callback',
-  async (req, res) => {
-    const { code, state, error } = req.query;
-
-    if (error || !code || !state || !verifyAdminOAuthState(String(state))) {
-      return res.status(400).send('관리자 로그인 요청이 유효하지 않거나 만료되었습니다.');
-    }
-
-    try {
-      const body = new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code: String(code),
-        redirect_uri: 'https://nuke-iukw.onrender.com/auth/admin/callback'
-      });
-
-      const tokenResponse = await fetch(
-        `${DISCORD_API}/oauth2/token`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body
-        }
-      );
-
-      const tokenData = await tokenResponse.json();
-
-      if (!tokenResponse.ok || !tokenData.access_token) {
-        throw new Error('Discord 관리자 로그인 토큰을 받지 못했습니다.');
-      }
-
-      if (!await isDiscordAdministrator(tokenData.access_token)) {
-        return res.status(403).send(`
+    if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
+      return res.status(403).send(`
 <!DOCTYPE html>
 <html lang="ko">
-<head>
-<meta charset="UTF-8">
-<title>접근 거부</title>
-<style>
-body { margin:0; min-height:100vh; background:#0f1117; color:white; font-family:Arial,sans-serif; display:flex; align-items:center; justify-content:center; }
-.box { background:#181b23; padding:35px; border-radius:18px; text-align:center; width:min(500px,90vw); }
-</style>
-</head>
-<body>
-<div class="box">
-<h1>🚫 관리자 권한이 필요합니다.</h1>
-<p>봇이 들어가 있는 서버 중 관리자 권한이 있는 Discord 계정만 사용할 수 있습니다.</p>
-<p>Discord 서버 관리자 권한을 확인한 뒤 다시 로그인해 주세요.</p>
+<head><meta charset="UTF-8"><title>로그인 실패</title></head>
+<body style="margin:0;min-height:100vh;background:#0f1117;color:white;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center">
+<div style="background:#181b23;padding:35px;border-radius:18px;text-align:center;width:min(450px,90vw)">
+<h1>🚫 비밀번호가 올바르지 않습니다.</h1>
+<a href="/login" style="color:#8ea1ff">다시 로그인</a>
 </div>
 </body>
-</html>
-        `);
-      }
-
-      req.session.loggedIn = true;
-      req.session.adminDiscordUser = true;
-
-      req.session.save(() => {
-        res.redirect('/');
-      });
-    } catch (error) {
-      console.error('❌ 관리자 Discord 로그인 오류:', error);
-      res.status(500).send('관리자 로그인 처리 중 오류가 발생했습니다.');
+</html>`);
     }
+
+    req.session.loggedIn = true;
+    req.session.save(() => res.redirect('/'));
   }
 );
-
 
 // ========================================
 // 로그아웃
