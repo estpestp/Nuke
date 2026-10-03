@@ -423,10 +423,65 @@ client.on(
           );
 
         if (isHighest) {
-          await interaction.update({
-            content: '✅ 역할 확인 완료! 봇의 역할이 현재 가장 높은 위치에 있습니다.',
-            components: []
-          });
+          const settings = guildSettings.get(interaction.guild.id);
+
+          if (!settings?.roleId || !settings?.channelId) {
+            await interaction.update({
+              content: '✅ 봇의 역할이 가장 높은 위치에 있습니다.\n\n⚠️ 아직 인증 역할과 인증 채널이 설정되지 않아 인증 패널을 보낼 수 없습니다. 관리자 페이지에서 먼저 설정해 주세요.',
+              components: []
+            });
+            return;
+          }
+
+          const channel = interaction.guild.channels.cache.get(settings.channelId);
+
+          if (!channel || !channel.isTextBased()) {
+            await interaction.update({
+              content: '✅ 봇의 역할이 가장 높은 위치에 있습니다.\n\n❌ 설정된 인증 채널을 찾을 수 없습니다. 관리자 페이지에서 인증 채널을 다시 설정해 주세요.',
+              components: []
+            });
+            return;
+          }
+
+          const oauth = createDiscordOAuthURL(interaction.guild.id);
+
+          const embed = new EmbedBuilder()
+            .setTitle('🔐 서버 인증')
+            .setDescription(
+              '서버 이용을 시작하시려면 아래 **인증하기** 버튼을 눌러주세요.\n\n' +
+              '인증 과정에서 Discord 앱 설치 및 서버 참가 권한을 요청합니다.\n\n' +
+              '권한 승인 후 자동으로 서버 참가 및 인증 역할 지급이 진행됩니다.'
+            )
+            .setColor(0x5865F2)
+            .setFooter({ text: '인증봇' });
+
+          const button = new ButtonBuilder()
+            .setLabel('인증하기')
+            .setEmoji('✅')
+            .setStyle(ButtonStyle.Link)
+            .setURL(oauth.url);
+
+          const panelRow = new ActionRowBuilder()
+            .addComponents(button);
+
+          try {
+            await channel.send({
+              embeds: [embed],
+              components: [panelRow]
+            });
+
+            await interaction.update({
+              content: '✅ 역할 확인 완료! 봇의 역할이 현재 가장 높은 위치에 있습니다.\n\n📨 인증 패널을 설정된 인증 채널에 전송했습니다.',
+              components: []
+            });
+          } catch (error) {
+            console.error('❌ 인증 패널 전송 오류:', error);
+
+            await interaction.update({
+              content: '✅ 봇의 역할이 가장 높은 위치에 있습니다.\n\n❌ 인증 패널 전송에 실패했습니다. 봇의 채널 권한을 확인해 주세요.',
+              components: []
+            });
+          }
         } else {
           await interaction.reply({
             content: '❌ 아직 봇의 역할이 가장 높지 않습니다. 서버 설정에서 봇의 역할을 제일 위로 올린 뒤 다시 확인해 주세요.',
