@@ -29,9 +29,15 @@ const CLIENT_ID =
 const CLIENT_SECRET =
   process.env.DISCORD_CLIENT_SECRET;
 
-const REDIRECT_URI =
+const CONFIGURED_REDIRECT_URI =
   process.env.DISCORD_REDIRECT_URI ||
   'https://nuke-iukw.onrender.com/auth/discord/callback';
+
+const REDIRECT_URI =
+  CONFIGURED_REDIRECT_URI === 'https://nuke-iukw.onrender.com/' ||
+  CONFIGURED_REDIRECT_URI === 'https://nuke-iukw.onrender.com'
+    ? 'https://nuke-iukw.onrender.com/auth/discord/callback'
+    : CONFIGURED_REDIRECT_URI;
 
 const ADMIN_PASSWORD =
   process.env.ADMIN_PASSWORD ||
