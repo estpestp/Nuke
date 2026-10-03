@@ -366,23 +366,22 @@ async function registerVerificationCommand(guild) {
       }
     ];
 
-    for (const bodyObject of commands) {
-      const body = JSON.stringify(bodyObject);
-      const existing = Array.isArray(data)
-        ? data.find(item => item.name === bodyObject.name)
-        : null;
+    const { response: overwriteResponse, data: overwriteData } =
+      await discordFetch(endpoint, {
+        method: 'PUT',
+        headers: {
+          Authorization: 'Bot ' + TOKEN,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(commands)
+      });
 
-      if (existing) {
-        await discordFetch(
-          endpoint + '/' + existing.id,
-          { method: 'PATCH', headers: { Authorization: 'Bot ' + TOKEN }, body }
-        );
-      } else {
-        await discordFetch(
-          endpoint,
-          { method: 'POST', headers: { Authorization: 'Bot ' + TOKEN }, body }
-        );
-      }
+    if (!overwriteResponse.ok) {
+      console.error(
+        `❌ /인증 및 /인증설정 명령어 덮어쓰기 실패 (${guild.name}):`,
+        overwriteData
+      );
+      return;
     }
 
     console.log(`✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name}`);
