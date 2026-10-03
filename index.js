@@ -384,7 +384,7 @@ async function registerVerificationCommand(guild) {
     const createdSetup = await guild.commands.create(setupCommand);
 
     console.log(
-      `✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name} | /인증설정 ID: ${createdSetup.id} | 옵션: ${createdSetup.options?.map(option => \`${option.name}(type=${option.type})\`).join(', ')}`
+      `✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name} | /인증설정 ID: ${createdSetup.id} | 옵션: ${createdSetup.options?.map(option => `${option.name}(type=${option.type})`).join(', ')}`
     );
   } catch (error) {
     console.error(
