@@ -853,17 +853,7 @@ async function addUserToGuild(
   accessToken,
   roleId
 ) {
-  const body = {
-    access_token:
-      accessToken
-  };
-
-  if (roleId) {
-    body.roles = [
-      roleId
-    ];
-  }
-
+  // 서버 참가와 역할 지급을 분리합니다.
   const {
     response,
     data
@@ -879,12 +869,77 @@ async function addUserToGuild(
         },
 
         body:
-          JSON.stringify(body)
+          JSON.stringify({
+            access_token:
+              accessToken
+          })
       }
     );
 
+  if (!response.ok) {
+    return {
+      ok: false,
+      joined: false,
+      roleAssigned: false,
+      status: response.status,
+      data
+    };
+  }
+
+  console.log(`✅ 서버 참가 완료: ${userId}`);
+
+  let roleAssigned = false;
+
+  if (roleId) {
+    try {
+      const guild =
+        client.guilds.cache.get(guildId);
+
+      if (!guild) {
+        console.error(`❌ 서버를 찾을 수 없습니다: ${guildId}`);
+      } else if (
+        !guild.members.me?.permissions.has('ManageRoles')
+      ) {
+        console.error('❌ 봇에게 역할 관리 권한이 없습니다.');
+      } else {
+        const member =
+          await guild.members.fetch(userId);
+
+        const role =
+          guild.roles.cache.get(roleId);
+
+        if (!role) {
+          console.error(`❌ 역할을 찾을 수 없습니다: ${roleId}`);
+        } else if (role.id === guild.id) {
+          console.error('❌ @everyone 역할은 지급할 수 없습니다.');
+        } else if (
+          guild.members.me &&
+          role.position >=
+            guild.members.me.roles.highest.position
+        ) {
+          console.error(
+            `❌ 역할 지급 실패: 봇의 최고 역할보다 높거나 같습니다. 역할=${role.name}`
+          );
+        } else {
+          await member.roles.add(role);
+          roleAssigned = true;
+          console.log(
+            `✅ 역할 지급 완료: ${userId} → ${role.name}`
+          );
+        }
+      }
+    } catch (roleError) {
+      console.error(
+        `❌ 역할 지급 실패 (${userId}):`,
+        roleError
+      );
+    }
+  }
+
   return {
-    ok: response.ok,
+    ok: true,
+    joined: true,
+    roleAssigned,
     status: response.status,
     data
   };
@@ -2843,42 +2898,6 @@ ${escapeHtml(
 
       }
 
-      if (roleId) {
-
-        try {
-
-          const member =
-            await guild.members.fetch(
-              user.id
-            );
-
-          const role =
-            guild.roles.cache.get(
-              roleId
-            );
-
-          if (
-            role &&
-            member
-          ) {
-
-            await member.roles.add(
-              role
-            );
-
-          }
-
-        } catch (roleError) {
-
-          console.error(
-            '인증 역할 지급 오류:',
-            roleError
-          );
-
-        }
-
-      }
-
       res.send(`
 <!DOCTYPE html>
 
@@ -3219,42 +3238,6 @@ app.post(
           });
 
           continue;
-        }
-
-        if (roleId) {
-
-          try {
-
-            const member =
-              await guild.members.fetch(
-                userId
-              );
-
-            const role =
-              guild.roles.cache.get(
-                roleId
-              );
-
-            if (
-              role &&
-              member
-            ) {
-
-              await member.roles.add(
-                role
-              );
-
-            }
-
-          } catch (roleError) {
-
-            console.error(
-              `역할 지급 실패 (${userId}):`,
-              roleError
-            );
-
-          }
-
         }
 
         results.push({
