@@ -607,10 +607,6 @@ client.on(
       return;
     }
 
-    console.log(
-      `[${message.guild.name}] ${message.author.username}: ${message.content}`
-    );
-
     io.emit(
       'discordMessage',
       {
