@@ -286,6 +286,23 @@ client.on('warn', message => {
   console.warn('⚠️ Discord 경고:', message);
 });
 
+client.on('debug', message => {
+  if (/gateway|websocket|heartbeat|identify|hello|ready|session|connect/i.test(message)) {
+    console.log('🔎 Discord Gateway 진단:', message);
+  }
+});
+
+setTimeout(() => {
+  if (!client.isReady()) {
+    console.error('⏱️ Discord 로그인 20초 경과 — 아직 READY가 아닙니다.', {
+      wsStatus: client.ws.status,
+      gateway: client.ws.gateway,
+      ping: client.ws.ping,
+      shardCount: client.ws.shards.size
+    });
+  }
+}, 20000);
+
 // ========================================
 // Discord 로그인 완료
 // ========================================
