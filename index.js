@@ -3851,6 +3851,37 @@ async function start() {
     '🔄 Discord 로그인 시도 중...'
   );
 
+  // discord.js와 별도로 Discord Gateway API 접근 가능 여부를 확인합니다.
+  fetch('https://discord.com/api/v10/gateway/bot', {
+    headers: {
+      Authorization: `Bot ${TOKEN}`
+    },
+    signal: AbortSignal.timeout(15000)
+  })
+    .then(async response => {
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        console.error('❌ Discord Gateway API 응답 오류:', {
+          status: response.status,
+          message: data.message || '응답 내용을 확인할 수 없습니다.'
+        });
+        return;
+      }
+
+      console.log('✅ Discord Gateway API 응답 성공:', {
+        status: response.status,
+        gateway: data.url || null,
+        recommendedShards: data.shards ?? null
+      });
+    })
+    .catch(error => {
+      console.error('❌ Discord Gateway API 연결 실패:', {
+        name: error.name,
+        message: error.message
+      });
+    });
+
   client.login(TOKEN)
     .then(() => {
       console.log(
