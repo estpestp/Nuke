@@ -3787,56 +3787,44 @@ function escapeHtml(
 
 async function start() {
 
-  try {
+  // 데이터베이스 연결 실패가 Discord 봇 로그인까지 막지 않도록
+  // 웹 서버와 봇을 먼저 시작합니다.
+  server.listen(
+    PORT,
+    () => {
+      console.log(
+        `🌐 웹 관리자 페이지 실행: ${PORT}`
+      );
+    }
+  );
 
+  console.log(
+    '🔄 Discord 로그인 시도 중...'
+  );
+
+  client.login(TOKEN)
+    .then(() => {
+      console.log(
+        '🔑 Discord 로그인 요청 완료'
+      );
+    })
+    .catch(error => {
+      console.error(
+        '❌ Discord 로그인 실패:',
+        error
+      );
+    });
+
+  // DB는 별도로 초기화합니다. 연결이 복구되면 재배포 없이도
+  // 다음 재시작 시 다시 초기화됩니다.
+  try {
     await initDatabase();
     await loadGuildSettings();
-
-    server.listen(
-      PORT,
-      () => {
-
-        console.log(
-          `🌐 웹 관리자 페이지 실행: ${PORT}`
-        );
-
-      }
-    );
-
-    console.log(
-      '🔄 Discord 로그인 시도 중...'
-    );
-
-    client.login(TOKEN)
-      .then(
-        () => {
-
-          console.log(
-            '🔑 Discord 로그인 요청 완료'
-          );
-
-        }
-      )
-      .catch(
-        error => {
-
-          console.error(
-            '❌ Discord 로그인 실패:',
-            error
-          );
-
-        }
-      );
-
   } catch (error) {
-
     console.error(
-      '❌ 서버 시작 실패:',
+      '⚠️ 데이터베이스 연결 실패: 봇은 계속 실행하지만 인증 설정 및 DB 기능은 사용할 수 없습니다.',
       error
     );
-
-    process.exit(1);
-
   }
 
 }
