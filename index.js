@@ -255,55 +255,6 @@ function broadcastBotStatus() {
 
 
 // ========================================
-// Discord 연결 진단 로그
-// ========================================
-
-client.on('error', error => {
-  console.error('❌ Discord Client 오류:', error);
-});
-
-client.on('shardError', error => {
-  console.error('❌ Discord Gateway 연결 오류:', error);
-});
-
-client.on('shardDisconnect', (event, shardId) => {
-  console.error('🔴 Discord Gateway 연결 끊김:', {
-    shardId,
-    code: event?.code,
-    reason: event?.reason?.toString?.() || ''
-  });
-});
-
-client.on('shardReconnecting', shardId => {
-  console.warn('🟠 Discord Gateway 재연결 중:', shardId);
-});
-
-client.on('invalidated', () => {
-  console.error('❌ Discord 세션이 무효화되었습니다.');
-});
-
-client.on('warn', message => {
-  console.warn('⚠️ Discord 경고:', message);
-});
-
-client.on('debug', message => {
-  if (/gateway|websocket|heartbeat|identify|hello|ready|session|connect/i.test(message)) {
-    console.log('🔎 Discord Gateway 진단:', message);
-  }
-});
-
-setTimeout(() => {
-  if (!client.isReady()) {
-    console.error('⏱️ Discord 로그인 20초 경과 — 아직 READY가 아닙니다.', {
-      wsStatus: client.ws.status,
-      gateway: client.ws.gateway,
-      ping: client.ws.ping,
-      shardCount: client.ws.shards.size
-    });
-  }
-}, 20000);
-
-// ========================================
 // Discord 로그인 완료
 // ========================================
 
@@ -3850,37 +3801,6 @@ async function start() {
   console.log(
     '🔄 Discord 로그인 시도 중...'
   );
-
-  // discord.js와 별도로 Discord Gateway API 접근 가능 여부를 확인합니다.
-  fetch('https://discord.com/api/v10/gateway/bot', {
-    headers: {
-      Authorization: `Bot ${TOKEN}`
-    },
-    signal: AbortSignal.timeout(15000)
-  })
-    .then(async response => {
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        console.error('❌ Discord Gateway API 응답 오류:', {
-          status: response.status,
-          message: data.message || '응답 내용을 확인할 수 없습니다.'
-        });
-        return;
-      }
-
-      console.log('✅ Discord Gateway API 응답 성공:', {
-        status: response.status,
-        gateway: data.url || null,
-        recommendedShards: data.shards ?? null
-      });
-    })
-    .catch(error => {
-      console.error('❌ Discord Gateway API 연결 실패:', {
-        name: error.name,
-        message: error.message
-      });
-    });
 
   client.login(TOKEN)
     .then(() => {
