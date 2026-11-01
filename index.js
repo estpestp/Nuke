@@ -255,6 +255,38 @@ function broadcastBotStatus() {
 
 
 // ========================================
+// Discord 연결 진단 로그
+// ========================================
+
+client.on('error', error => {
+  console.error('❌ Discord Client 오류:', error);
+});
+
+client.on('shardError', error => {
+  console.error('❌ Discord Gateway 연결 오류:', error);
+});
+
+client.on('shardDisconnect', (event, shardId) => {
+  console.error('🔴 Discord Gateway 연결 끊김:', {
+    shardId,
+    code: event?.code,
+    reason: event?.reason?.toString?.() || ''
+  });
+});
+
+client.on('shardReconnecting', shardId => {
+  console.warn('🟠 Discord Gateway 재연결 중:', shardId);
+});
+
+client.on('invalidated', () => {
+  console.error('❌ Discord 세션이 무효화되었습니다.');
+});
+
+client.on('warn', message => {
+  console.warn('⚠️ Discord 경고:', message);
+});
+
+// ========================================
 // Discord 로그인 완료
 // ========================================
 
