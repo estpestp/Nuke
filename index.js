@@ -269,19 +269,26 @@ client.once(
       `📡 현재 ${client.guilds.cache.size}개의 서버에 연결되어 있습니다.`
     );
 
-    // 예전에 전역(Global)으로 등록된 명령어가 서버별 명령어와
-    // 중복 표시되지 않도록 이 애플리케이션의 전역 명령어를 비웁니다.
-    try {
-      const removedGlobalCommands = await client.application.commands.set([]);
-      console.log(
-        `🗑️ 기존 전역 슬래시 명령어 ${removedGlobalCommands.size}개 삭제 완료`
-      );
-    } catch (error) {
-      console.error('❌ 전역 슬래시 명령어 삭제 실패:', error);
+    // 서버별 명령어를 먼저 비워 중복 등록을 제거합니다.
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        const removed = await guild.commands.set([]);
+        console.log(`🗑️ ${guild.name}: 서버별 명령어 ${removed.size}개 삭제 완료`);
+      } catch (error) {
+        console.error(`❌ ${guild.name}: 서버별 명령어 삭제 실패:`, error);
+      }
     }
 
-    for (const guild of client.guilds.cache.values()) {
-      await registerVerificationCommand(guild);
+    // 명령어는 전역(Global)에 한 번만 등록합니다.
+    try {
+      const registered = await client.application.commands.set(
+        buildVerificationCommands()
+      );
+      console.log(
+        `♻️ 전역 슬래시 명령어 ${registered.size}개 등록 완료: ${registered.map(command => `/${command.name}`).join(', ')}`
+      );
+    } catch (error) {
+      console.error('❌ 전역 슬래시 명령어 등록 실패:', error);
     }
 
     broadcastBotStatus();
@@ -338,37 +345,22 @@ client.on(
 // /인증 명령어 및 역할 확인
 // ========================================
 
-async function registerVerificationCommand(guild) {
-  try {
-    // 이 봇이 해당 서버에 등록한 기존 슬래시 명령어를 전부 비우고,
-    // 현재 코드에 정의된 명령어만 한 번에 다시 등록합니다.
-    const commands = [
-      new SlashCommandBuilder()
-        .setName('인증')
-        .setDescription('봇의 역할 위치를 확인합니다.'),
+function buildVerificationCommands() {
+  return [
+    new SlashCommandBuilder()
+      .setName('인증')
+      .setDescription('봇의 역할 위치를 확인합니다.'),
 
-      new SlashCommandBuilder()
-        .setName('인증설정')
-        .setDescription('현재 채널을 인증 채널로 설정하고 인증 역할을 지정합니다.')
-        .addRoleOption(option =>
-          option
-            .setName('역할')
-            .setDescription('인증 완료 후 지급할 역할')
-            .setRequired(true)
-        )
-    ].map(command => command.toJSON());
-
-    const registeredCommands = await guild.commands.set(commands);
-
-    console.log(
-      `♻️ 슬래시 명령어 전체 초기화 및 재등록 완료: ${guild.name} | ${registeredCommands.size}개 (${registeredCommands.map(command => `/${command.name}`).join(', ')})`
-    );
-  } catch (error) {
-    console.error(
-      `❌ 슬래시 명령어 초기화/등록 오류 (${guild.name}):`,
-      error
-    );
-  }
+    new SlashCommandBuilder()
+      .setName('인증설정')
+      .setDescription('현재 채널을 인증 채널로 설정하고 인증 역할을 지정합니다.')
+      .addRoleOption(option =>
+        option
+          .setName('역할')
+          .setDescription('인증 완료 후 지급할 역할')
+          .setRequired(true)
+      )
+  ].map(command => command.toJSON());
 }
 async function checkBotRolePosition(guild) {
   const botMember =
