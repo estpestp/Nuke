@@ -329,6 +329,8 @@ client.on(
 
 async function registerVerificationCommand(guild) {
   try {
+    // 이 봇이 해당 서버에 등록한 기존 슬래시 명령어를 전부 비우고,
+    // 현재 코드에 정의된 명령어만 한 번에 다시 등록합니다.
     const commands = [
       new SlashCommandBuilder()
         .setName('인증')
@@ -345,43 +347,14 @@ async function registerVerificationCommand(guild) {
         )
     ].map(command => command.toJSON());
 
-    // 기존 /인증설정 명령어를 삭제한 뒤 새 ID로 생성합니다.
-    // Discord 클라이언트에 남아 있는 이전 명령어 스키마와 충돌하지 않도록 합니다.
-    const existingCommands = await guild.commands.fetch();
-    const oldSetupCommand = existingCommands.find(
-      command => command.name === '인증설정'
-    );
-
-    if (oldSetupCommand) {
-      await guild.commands.delete(oldSetupCommand.id);
-      console.log(
-        `🗑️ 기존 /인증설정 삭제: ${guild.name} (${oldSetupCommand.id})`
-      );
-    }
-
-    // /인증은 기존 명령어와 중복되지 않도록 전체 목록을 다시 반영합니다.
-    const authCommand = commands.find(command => command.name === '인증');
-    if (authCommand) {
-      const existingAuth = (await guild.commands.fetch()).find(
-        command => command.name === '인증'
-      );
-
-      if (existingAuth) {
-        await guild.commands.edit(existingAuth.id, authCommand);
-      } else {
-        await guild.commands.create(authCommand);
-      }
-    }
-
-    const setupCommand = commands.find(command => command.name === '인증설정');
-    const createdSetup = await guild.commands.create(setupCommand);
+    const registeredCommands = await guild.commands.set(commands);
 
     console.log(
-      `✅ /인증 및 /인증설정 명령어 등록 완료: ${guild.name} | /인증설정 ID: ${createdSetup.id} | 옵션: ${createdSetup.options?.map(option => `${option.name}(type=${option.type})`).join(', ')}`
+      `♻️ 슬래시 명령어 전체 초기화 및 재등록 완료: ${guild.name} | ${registeredCommands.size}개 (${registeredCommands.map(command => `/${command.name}`).join(', ')})`
     );
   } catch (error) {
     console.error(
-      `❌ /인증 명령어 등록 오류 (${guild.name}):`,
+      `❌ 슬래시 명령어 초기화/등록 오류 (${guild.name}):`,
       error
     );
   }
