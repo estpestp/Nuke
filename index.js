@@ -269,6 +269,17 @@ client.once(
       `📡 현재 ${client.guilds.cache.size}개의 서버에 연결되어 있습니다.`
     );
 
+    // 예전에 전역(Global)으로 등록된 명령어가 서버별 명령어와
+    // 중복 표시되지 않도록 이 애플리케이션의 전역 명령어를 비웁니다.
+    try {
+      const removedGlobalCommands = await client.application.commands.set([]);
+      console.log(
+        `🗑️ 기존 전역 슬래시 명령어 ${removedGlobalCommands.size}개 삭제 완료`
+      );
+    } catch (error) {
+      console.error('❌ 전역 슬래시 명령어 삭제 실패:', error);
+    }
+
     for (const guild of client.guilds.cache.values()) {
       await registerVerificationCommand(guild);
     }
