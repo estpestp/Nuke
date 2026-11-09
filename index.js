@@ -512,7 +512,7 @@ client.on(
             return;
           }
 
-          const oauth = createDiscordOAuthURL(interaction.guild.id);
+          const oauthStartURL = createDiscordOAuthStartURL(interaction.guild.id);
 
           const embed = new EmbedBuilder()
             .setTitle('🔐 서버 인증')
@@ -528,7 +528,7 @@ client.on(
             .setLabel('인증하기')
             .setEmoji('✅')
             .setStyle(ButtonStyle.Link)
-            .setURL(oauth.url);
+            .setURL(oauthStartURL);
 
           const panelRow = new ActionRowBuilder()
             .addComponents(button);
@@ -907,6 +907,15 @@ function createDiscordOAuthURL(
     url:
       `https://discord.com/oauth2/authorize?${params.toString()}`
   };
+}
+
+
+function createDiscordOAuthStartURL(
+  guildId
+) {
+  const url = new URL('/auth/discord', REDIRECT_URI);
+  url.searchParams.set('guildId', guildId);
+  return url.toString();
 }
 
 
@@ -2875,8 +2884,8 @@ location.href = '/';
 
     }
 
-    const oauth =
-      createDiscordOAuthURL(
+    const oauthStartURL =
+      createDiscordOAuthStartURL(
         guildId
       );
 
@@ -2910,7 +2919,7 @@ location.href = '/';
           ButtonStyle.Link
         )
         .setURL(
-          oauth.url
+          oauthStartURL
         );
 
     const row =
