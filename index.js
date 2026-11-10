@@ -52,7 +52,7 @@ const DISCORD_API =
 // ========================================
 // 필수 환경변수 확인
 // ========================================
-
+=
 if (!TOKEN) {
   console.error(
     '❌ DISCORD_TOKEN 환경변수가 없습니다.'
@@ -506,7 +506,7 @@ client.on(
 
           if (!channel || !channel.isTextBased()) {
             await interaction.update({
-              content: '✅ 봇의 역할이 가장 높은 위치에 있습니다.\n\n❌ 설정된 인증 채널을 찾을 수 없습니다. 관리자 페이지에서 인증 채널을 다시 설정해 주세요.',
+              content: '✅ 봇의 역할이 가장 높은 위치에 있습니다.\n\n❌ 설정된 인증 채널을 찾을 수 없습니다. /인증설정 으로 인증 채널과 인증 역할을 지정 해 주세요.',
               components: []
             });
             return;
